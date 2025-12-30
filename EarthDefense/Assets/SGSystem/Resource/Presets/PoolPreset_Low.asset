@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: PoolPreset_Low
+  m_EditorClassIdentifier: 
+  description: "\uC800\uBE48\uB3C4 \uC0AC\uC6A9 \uC624\uBE0C\uC81D\uD2B8.\n\uD29C\uD1A0\uB9AC\uC5BC,
+    \uC77C\uD68C\uC131 UI \uB4F1\uC5D0 \uC801\uD569\uD569\uB2C8\uB2E4."
+  config:
+    enabled: 1
+    preloadCount: 5
+    maxPoolSize: 20
+    autoExpand: 1
+    cullExcess: 0
+    cullInterval: 60
