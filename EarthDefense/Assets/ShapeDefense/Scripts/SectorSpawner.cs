@@ -1,24 +1,36 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 namespace ShapeDefense.Scripts
 {
     /// <summary>
     /// HTML 원본의 chunkStacks/nextR 개념을 유니티로 옮긴 최소 스포너.
-    /// - 중심을 기준으로 각도 슬롯(chunkCount)을 만들고
-    /// - 각 슬롯마다 링 섹터 조각을 스택처럼 바깥쪽으로 계속 쌓아 채운다.
-    /// - 조각들은 시간이 지나면 중심을 향해 접근하며, 슬롯의 가장 바깥쪽이 일정 거리 이하가 되면 새 조각을 추가한다.
+    /// 
+    /// 용어(문서 기준):
+    /// - 섹터(Sector): 360도를 일정 각도로 나눈 방향 슬롯(slot)
+    /// - 조각(Chunk): 한 섹터(slot) 안에서 반지름 A~B를 차지하는 적 스트립 1개(=SectorEnemy 1개)
+    /// - 셀(Cell): 조각 내부 데미지 단위(RingSectorDamageMask)
+    /// 
+    /// 동작:
+    /// - 중심을 기준으로 섹터 슬롯(chunkCount)을 만들고
+    /// - 각 슬롯마다 조각(Chunk)을 스택처럼 바깥쪽으로 계속 쌓아 채운다.
+    /// - 링 전체는 시간이 지나면 반지름 오프셋으로 안쪽으로 이동한다.
+    /// - 슬롯의 가장 바깥쪽이 목표 반지름 이하가 되면 새 조각을 추가한다.
     /// </summary>
     public sealed class SectorSpawner : MonoBehaviour
     {
         [Header("Refs")]
         [SerializeField] private Transform center;
         [SerializeField] private PlayerCore playerCore;
-        [SerializeField] private SectorEnemy sectorPrefab;
+        [SerializeField] private ChunkEnemy sectorPrefab;
 
         [Header("Layout")]
+        [Tooltip("섹터(Sector) 개수. 360도를 이 수만큼 동일 각도로 분할합니다. (레거시 네이밍: chunkCount)")]
         [SerializeField, Min(1)] private int chunkCount = 18;
+
+        [Tooltip("섹터(slot)마다 초기 조각(Chunk)을 몇 개 생성할지")]
         [SerializeField, Min(1)] private int initialPerChunk = 10;
+
         [SerializeField, Min(0f)] private float startRadius = 4.0f;
         [SerializeField, Min(0.01f)] private float thickness = 1.0f;
         [SerializeField] private bool randomThickness;
@@ -44,7 +56,7 @@ namespace ShapeDefense.Scripts
         [Tooltip("켜면 반지름 오프셋을 매 프레임 갱신해 링이 안쪽으로 이동합니다. 문제 진단 시 끄면 고정됩니다.")]
         [SerializeField] private bool animateRadiusOffset = true;
 
-        [Tooltip("각 슬롯의 바깥쪽을 이 반지름까지 항상 채웁니다(월드 기준). 카메라 화면 밖까지 채워두면 빈틈이 안 보입니다.")]
+        [Tooltip("각 섹터(slot)의 바깥쪽을 이 반지름까지 항상 채웁니다(월드 기준). 카메라 화면 밖까지 채워두면 빈틈이 안 보입니다.")]
         [SerializeField, Min(0f)] private float ensureFilledUntilRadius = 24.0f;
 
         [Header("Enemy")]
@@ -63,13 +75,13 @@ namespace ShapeDefense.Scripts
         [SerializeField] private bool syncReachRadiusFromShell = true;
 
         [Header("Pixel Thickness")]
-        [Tooltip("켜면 thickness를 월드값으로 고정하지 않고, 화면(픽셀) 기준 두께를 유지하도록 자동 계산합니다(Orthographic 카메라 전용).")]
+        [Tooltip("켜면 조각(Chunk) 두께(thickness)를 월드값으로 고정하지 않고, 화면(픽셀) 기준 두께를 유지하도록 자동 계산합니다(Orthographic 카메라 전용).")]
         [SerializeField] private bool keepPixelThickness = true;
 
         [Tooltip("keepPixelThickness=true일 때 목표 픽셀 두께")]
         [SerializeField, Min(1f)] private float targetPixelThickness = 28f;
 
-        private readonly List<SectorEnemy>[] _stacks = new List<SectorEnemy>[512];
+        private readonly List<ChunkEnemy>[] _stacks = new List<ChunkEnemy>[512];
         private float[] _nextR = new float[512];
 
         private void Reset()
@@ -135,7 +147,7 @@ namespace ShapeDefense.Scripts
 
             for (int i = 0; i < chunkCount; i++)
             {
-                _stacks[i] = new List<SectorEnemy>(initialPerChunk + 8);
+                _stacks[i] = new List<ChunkEnemy>(initialPerChunk + 8);
 
                 // 전역 스크롤(음수) 기준에서도 startRadius 바깥부터 채우려면 base는 startRadius - globalScroll
                 _nextR[i] = startRadius;
@@ -160,7 +172,7 @@ namespace ShapeDefense.Scripts
                 var stack = _stacks[i];
                 if (stack == null)
                 {
-                    _stacks[i] = new List<SectorEnemy>();
+                    _stacks[i] = new List<ChunkEnemy>();
                     _nextR[i] = startRadius;
                     stack = _stacks[i];
                 }
@@ -198,20 +210,53 @@ namespace ShapeDefense.Scripts
             FillSlotToRadius(slotIndex, 0f);
         }
 
+        private void OnValidate()
+        {
+            chunkCount = Mathf.Clamp(chunkCount, 1, 512);
+            initialPerChunk = Mathf.Max(1, initialPerChunk);
+            thickness = Mathf.Max(0.01f, thickness);
+            minThickness = Mathf.Max(0.01f, minThickness);
+            maxThickness = Mathf.Max(0.01f, maxThickness);
+            if (maxThickness < minThickness)
+            {
+                var tmp = minThickness;
+                minThickness = maxThickness;
+                maxThickness = tmp;
+            }
+            targetPixelThickness = Mathf.Max(1f, targetPixelThickness);
+        }
+
         private float CurrentThickness()
         {
-            if (!keepPixelThickness) return randomThickness ? Random.Range(minThickness, maxThickness) : thickness;
+            // 1) randomThickness가 켜져 있으면 어떤 모드든 '랜덤 결과'가 나오도록 보장한다.
+            //  - keepPixelThickness=false : min/max 월드값 그대로 사용
+            //  - keepPixelThickness=true  : 픽셀 기반 두께(worldT)를 기준으로 비율 랜덤을 적용
+
+            if (!keepPixelThickness)
+            {
+                return randomThickness ? Random.Range(minThickness, maxThickness) : thickness;
+            }
 
             var cam = Camera.main;
             if (cam == null || !cam.orthographic)
             {
-                // 카메라를 못 찾으면 폴백
+                // 카메라를 못 찾으면 월드값 경로로 폴백
                 return randomThickness ? Random.Range(minThickness, maxThickness) : thickness;
             }
 
             var worldT = SectorGridSolver.WorldThicknessForPixelThickness(cam, targetPixelThickness);
-            if (worldT > 0.0001f) return worldT;
-            return randomThickness ? Random.Range(minThickness, maxThickness) : thickness;
+            if (worldT <= 0.0001f)
+            {
+                return randomThickness ? Random.Range(minThickness, maxThickness) : thickness;
+            }
+
+            if (!randomThickness) return worldT;
+
+            // 픽셀 두께를 '기준값'으로 유지하면서, min/max를 비율(스케일) 범위로 해석해 랜덤화한다.
+            // 예: minThickness=0.6, maxThickness=1.6 이면 base 두께의 0.6~1.6배
+            var scaleMin = Mathf.Max(0.01f, minThickness);
+            var scaleMax = Mathf.Max(scaleMin, maxThickness);
+            return worldT * Random.Range(scaleMin, scaleMax);
         }
 
         private void AddNewChunk(int slotIndex)
@@ -225,7 +270,7 @@ namespace ShapeDefense.Scripts
 
             var enemy = Instantiate(sectorPrefab, center.position, Quaternion.identity, transform);
 
-            // 조각별 랜덤 색(원하면 cycle 기반으로 교체)
+            // 조각(Chunk)별 랜덤 색(원하면 cycle 기반으로 교체)
             var col = Color.HSVToRGB(Random.value, 0.85f, 0.85f);
 
             enemy.Configure(
@@ -245,7 +290,7 @@ namespace ShapeDefense.Scripts
             var rsm = enemy.GetComponent<RingSectorMesh>();
             if (rsm != null) rsm.SetVertexColor(col);
 
-            // 새로 생성된 조각은 다음 Update에서 SetGlobalOffsets로 동기화됨
+            // 새로 생성된 조각(Chunk)은 다음 Update에서 SetGlobalOffsets로 동기화됨
             _stacks[slotIndex].Add(enemy);
             _nextR[slotIndex] += t;
         }

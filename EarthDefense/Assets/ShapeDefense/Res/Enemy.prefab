@@ -134,7 +134,7 @@ MonoBehaviour:
   angleStepDeg: 4
   radialCells: 5
   useRadialStep: 0
-  radialStep: 1
+  radialStep: 5
   cellHp: 60
   discreteCells: 1
   preErodeVisual: 0

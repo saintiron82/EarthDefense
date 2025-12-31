@@ -1,15 +1,20 @@
-using System;
+﻿using System;
 using UnityEngine;
 
 namespace ShapeDefense.Scripts
 {
     /// <summary>
-    /// RingSectorMesh에 '각도 셀(cell) 단위 침식/파괴'를 적용하기 위한 간단한 피해 마스크.
+    /// `RingSectorMesh`(조각/Chunk 메시)에 '셀(Cell) 단위 침식/파괴'를 적용하기 위한 피해 마스크.
+    /// 
+    /// 용어(문서 기준):
+    /// - 섹터(Sector): 360도를 일정 각도로 나눈 방향 슬롯(slot)
+    /// - 조각(Chunk): 한 섹터(slot) 안에서 반지름 A~B를 차지하는 스트립 1개(=RingSectorMesh 1개)
+    /// - 셀(Cell): 조각 내부 데미지 단위(각도 x 반지름)
     /// 
     /// 컨셉(HTML 원본과 유사):
-    /// - 섹터를 angleCells로 쪼갠 뒤, 각 셀마다 damageDepth(0..1)를 저장한다.
-    /// - damageDepth==1이면 해당 셀은 완전히 제거(메시에서 삼각형 제외).
-    /// - damageDepth가 0~1이면 안쪽 반지름을 바깥으로 밀어(침식) '파여나간' 느낌을 낸다.
+    /// - 조각(Chunk)의 각도 범위를 `angleCells`로 나누고, 반지름 방향을 `radialCells`로 나눈 2D 셀을 관리한다.
+    /// - 셀마다 누적 피해량을 저장하고, 0..1 침식도(erosion)를 계산한다.
+    /// - erosion==1이면 해당 셀은 완전히 제거(메시에서 삼각형 제외).
     /// 
     /// 주의:
     /// - 이 컴포넌트는 '표현'에 집중. 정확한 히트 판정은 별도 수학 로직으로 처리 권장.

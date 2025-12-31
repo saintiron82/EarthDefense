@@ -1,15 +1,21 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace ShapeDefense.Scripts
 {
     /// <summary>
-    /// 링 섹터(부채꼴 조각) 1개의 게임플레이 상태를 관리.
-    /// - 중심을 향해 반지름 방향으로 접근
-    /// - 도달 반지름에 닿으면 (옵션) 플레이어 코어에 접촉 피해
-    /// - 렌더링은 RingSectorMesh가 담당
-    /// - 셀 파괴/피해는 RingSectorDamageMask가 담당
+    /// 조각(Chunk) 1개의 게임플레이 상태를 관리.
+    /// 
+    /// 용어(문서 기준):
+    /// - 섹터(Sector): 360도를 일정 각도로 나눈 방향 슬롯(slot)
+    /// - 조각(Chunk): 한 섹터(slot) 안에서 반지름 A~B를 차지하는 적 스트립 1개(=본 컴포넌트)
+    /// - 셀(Cell): 조각 내부 데미지 단위(RingSectorDamageMask)
+    /// 
+    /// 동작:
+    /// - 링 전체 이동은 `SectorSpawner`가 `radiusOffset`으로 처리
+    /// - 렌더링은 `RingSectorMesh`가 담당
+    /// - 셀 파괴/피해는 `RingSectorDamageMask`가 담당
     /// </summary>
-    public sealed class SectorEnemy : MonoBehaviour
+    public sealed class ChunkEnemy : MonoBehaviour
     {
         [Header("Refs")]
         [SerializeField] private Transform center;
@@ -17,10 +23,10 @@ namespace ShapeDefense.Scripts
         [SerializeField] private RingSectorDamageMask damageMask;
 
         [Header("Move")]
-        [Tooltip("섹터의 고정 바깥 반지름(스폰 시 결정). 조여오는 연출은 innerRadius를 바깥으로 밀어 thickness를 줄여서 구현합니다.")]
+        [Tooltip("조각(Chunk)의 기준 바깥 반지름(스폰 시 결정). 링은 SectorSpawner의 radiusOffset으로 이동합니다.")]
         [SerializeField, Min(0f)] private float baseOuterRadius = 6f;
 
-        [Tooltip("현재 두께(월드). 전역 squeeze 값에 따라 감소합니다.")]
+        [Tooltip("조각(Chunk) 두께(월드). 스폰 시 결정되며 현재 로직에서는 전역 squeeze로 변경하지 않습니다.")]
         [SerializeField, Min(0.0001f)] private float thickness = 1f;
 
         [SerializeField, Min(0f)] private float reachRadius = 1.2f;
@@ -99,15 +105,10 @@ namespace ShapeDefense.Scripts
         }
 
         /// <summary>
-        /// 전역 squeeze(조임) 값을 주입. 값이 커질수록 Thickness가 줄어들어 링이 얇아집니다.
+        /// 전역 이동/조임 값을 주입.
+        /// - radiusOffset: 링 전체 반지름 이동(스포너가 관리)
+        /// - squeeze: 레거시 호환 파라미터(현재는 사용하지 않음)
         /// </summary>
-        public void SetGlobalScroll(float globalScroll)
-        {
-            // 호환용: 기존 코드는 globalScroll(음수)을 radiusOffset으로만 쓰거나 squeeze로만 썼음.
-            // 현재는 '둘 다' 필요하므로, 여기선 radiusOffset으로 해석하고 squeeze는 0으로 둔다.
-            SetGlobalOffsets(globalScroll, 0f);
-        }
-
         public void SetGlobalOffsets(float radiusOffset, float squeeze)
         {
             // squeeze는 더 이상 사용하지 않음(두께 고정).
