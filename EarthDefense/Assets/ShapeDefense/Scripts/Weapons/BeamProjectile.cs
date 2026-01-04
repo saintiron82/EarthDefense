@@ -78,6 +78,13 @@ namespace ShapeDefense.Scripts.Weapons
             }
         }
 
+        private void ClearBlock()
+        {
+            _blockingHealth = null;
+            _blockingChunk = null;
+            _blockLength = 0f;
+        }
+
         protected override void UpdateProjectile()
         {
             float delta = Time.deltaTime;
@@ -98,81 +105,60 @@ namespace ShapeDefense.Scripts.Weapons
 
             Vector2 startPos = transform.position;
             Vector2 aimDir = transform.right;
-            float rayLength = _currentLength;
-            Vector2 endPos = startPos + aimDir * rayLength;
+            float desiredLength = _currentLength;
 
-            // Clamp to the stored blocking point if we already have one
-            if (_blockingHealth != null || _blockingChunk != null)
+            // 기존 블록 유효성 확인
+            if (_blockingHealth != null && _blockingHealth.IsDead)
             {
-                rayLength = Mathf.Min(rayLength, _blockLength);
-                endPos = startPos + aimDir * rayLength;
+                ClearBlock();
+            }
+            else if (_blockingChunk != null && _blockAngleIdx >= 0 && _blockRadiusIdx >= 0 && _blockingChunk.IsCellDestroyed(_blockingChunk.AngleCells * _blockRadiusIdx + _blockAngleIdx))
+            {
+                ClearBlock();
+            }
+
+            bool hasSweepHit = false;
+            HitResult sweepHit = default;
+            Vector2 sweepEnd = startPos + aimDir * desiredLength;
+
+            if (TrySweepHit(startPos, sweepEnd, aimDir, sweepSteps, sweepEpsilon, hitRadius, out sweepHit))
+            {
+                hasSweepHit = true;
+                _blockLength = Vector2.Distance(startPos, sweepHit.Point);
+                sweepEnd = startPos + aimDir * Mathf.Min(desiredLength, _blockLength);
+                _currentLength = Mathf.Min(_currentLength, _blockLength);
+
+                if (sweepHit.Health != null)
+                {
+                    _blockingHealth = sweepHit.Health;
+                    _blockingChunk = null;
+                }
+                else if (sweepHit.Chunk != null)
+                {
+                    _blockingChunk = sweepHit.Chunk;
+                    _blockingHealth = null;
+                    _blockAngleIdx = sweepHit.AngleIndex;
+                    _blockRadiusIdx = sweepHit.RadiusIndex;
+                }
+            }
+            else if (_blockingHealth != null || _blockingChunk != null)
+            {
+                sweepEnd = startPos + aimDir * Mathf.Min(desiredLength, _blockLength);
+                _currentLength = Mathf.Min(_currentLength, _blockLength);
             }
 
             if (!_isRetracting && _hitsLeft > 0 && Time.time >= _nextTickTime)
             {
-                if (_blockingHealth != null)
-                {
-                    if (_blockingHealth.IsDead)
-                    {
-                        _blockingHealth = null;
-                        _blockLength = 0f;
-                        _hitsLeft = Mathf.Max(0, _hitsLeft - 1);
-                    }
-                    else
-                    {
-                        float damagePerTick = Damage / Mathf.Max(0.0001f, _tickRate);
-                        var hit = new HitResult(startPos + aimDir * _blockLength, null, _blockingHealth);
-                        ApplyHit(hit, aimDir, damagePerTick, hitEffect, false);
-                        endPos = startPos + aimDir * _blockLength;
-                    }
-                }
-                else if (_blockingChunk != null)
-                {
-                    if (_blockAngleIdx >= 0 && _blockRadiusIdx >= 0 && _blockingChunk.IsCellDestroyed(_blockingChunk.AngleCells * _blockRadiusIdx + _blockAngleIdx))
-                    {
-                        _blockingChunk = null;
-                        _hitsLeft = Mathf.Max(0, _hitsLeft - 1);
-                        _blockLength = 0f;
-                    }
-                    else
-                    {
-                        float damagePerTick = Damage / Mathf.Max(0.0001f, _tickRate);
-                        var hit = new HitResult(startPos + aimDir * _blockLength, _blockingChunk, null, _blockAngleIdx, _blockRadiusIdx);
-                        ApplyHit(hit, aimDir, damagePerTick, hitEffect, false);
-                        endPos = startPos + aimDir * _blockLength;
-                    }
-                }
-                else if (TrySweepHit(startPos, endPos, aimDir, sweepSteps, sweepEpsilon, hitRadius, out var hit) && CanHit(hit))
+                if (hasSweepHit && CanHit(sweepHit))
                 {
                     float damagePerTick = Damage / Mathf.Max(0.0001f, _tickRate);
-                    ApplyHit(hit, aimDir, damagePerTick, hitEffect, false);
+                    ApplyHit(sweepHit, aimDir, damagePerTick, hitEffect, false);
+                    _hitsLeft = Mathf.Max(0, _hitsLeft - 1);
 
-                    _blockLength = Vector2.Distance(startPos, hit.Point);
-                    _currentLength = Mathf.Min(_currentLength, _blockLength);
-                    endPos = startPos + aimDir * _blockLength;
-
-                    if (hit.Health != null)
-                    {
-                        _blockingHealth = hit.Health;
-                        _blockingChunk = null;
-                    }
-                    else if (hit.Chunk != null)
-                    {
-                        _blockingChunk = hit.Chunk;
-                        _blockingHealth = null;
-                        _blockAngleIdx = hit.AngleIndex;
-                        _blockRadiusIdx = hit.RadiusIndex;
-                    }
-
-                    if (MaxHits <= 1)
+                    if (_hitsLeft <= 0 || MaxHits <= 1)
                     {
                         BeginRetract();
                     }
-                }
-
-                if (_hitsLeft <= 0)
-                {
-                    BeginRetract();
                 }
 
                 _nextTickTime = Time.time + (1f / _tickRate);
@@ -181,7 +167,7 @@ namespace ShapeDefense.Scripts.Weapons
             if (lineRenderer != null)
             {
                 lineRenderer.SetPosition(0, startPos);
-                lineRenderer.SetPosition(1, endPos);
+                lineRenderer.SetPosition(1, sweepEnd);
             }
         }
 

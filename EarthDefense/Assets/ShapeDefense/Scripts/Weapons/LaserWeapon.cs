@@ -17,6 +17,7 @@ namespace ShapeDefense.Scripts.Weapons
 
         private LaserWeaponData _laserWeaponData;
         private BeamProjectile _activeBeam;
+        private float _beamEndTime;
         
         protected IObjectPool<BeamProjectile> _projectilePool;
 
@@ -43,9 +44,16 @@ namespace ShapeDefense.Scripts.Weapons
         protected override void FireInternal(Vector2 direction)
         {
             if (!CanFire) return;
-            
-            // 발사 각도: 오브젝트 중심 → 머즐 방향 (실시간 추적)
             _nextFireTime = Time.time + (1f / FireRate);
+
+            // 재발사 입력 시 기존 빔 연장만
+            if (_activeBeam != null && _activeBeam.IsActive)
+            {
+                UpdateBeamTransform();
+                _beamEndTime = Time.time + LaserWeaponData.LaserDuration;
+                return;
+            }
+
             SpawnBeam();
         }
         
@@ -59,32 +67,35 @@ namespace ShapeDefense.Scripts.Weapons
                 return;
             }
 
-            beam.transform.SetParent(Muzzle, worldPositionStays: true);
-            beam.transform.position = Muzzle.position;
-            beam.transform.rotation = Muzzle.rotation;
+            _activeBeam = beam;
+            _beamEndTime = Time.time + LaserWeaponData.LaserDuration;
+
+            UpdateBeamTransform();
 
             // Beam 자체가 방향/틱을 관리하므로 speed=0, lifetime은 넉넉히(리트랙트 호출로 종료)
-            beam.Fire(Vector2.zero, ProjectileDamage, 0f, _laserWeaponData.LaserDuration * 2f, int.MaxValue, _source, _sourceTeamKey);
+            beam.Fire(Vector2.zero, ProjectileDamage, 0f, LaserWeaponData.LaserDuration * 2f, int.MaxValue, _source, _sourceTeamKey);
             beam.Configure(
-                _laserWeaponData.LaserWidth,
-                _laserWeaponData.HitRadius,
-                _laserWeaponData.SweepSteps,
-                _laserWeaponData.SweepEpsilon,
-                _laserWeaponData.RehitCooldown,
-                _laserWeaponData.DamageTickRate,
-                _laserWeaponData.LaserExtendSpeed,
-                _laserWeaponData.LaserRetractSpeed,
-                _laserWeaponData.BeamMaxLength,
-                _laserWeaponData.LaserColor,
+                LaserWeaponData.LaserWidth,
+                LaserWeaponData.HitRadius,
+                LaserWeaponData.SweepSteps,
+                LaserWeaponData.SweepEpsilon,
+                LaserWeaponData.RehitCooldown,
+                LaserWeaponData.DamageTickRate,
+                LaserWeaponData.LaserExtendSpeed,
+                LaserWeaponData.LaserRetractSpeed,
+                LaserWeaponData.BeamMaxLength,
+                LaserWeaponData.LaserColor,
                 hitEffect);
 
-            // 빔이 동일 대상 여러 번 때릴 수 있는 총량을 데이터에서 설정
-            beam.OverrideMaxHits(_laserWeaponData.BeamMaxHits);
+            beam.OverrideMaxHits(LaserWeaponData.BeamMaxHits);
+        }
 
-            _activeBeam = beam;
-
-            // 지속시간 후 리트랙트
-            Invoke(nameof(StopBeam), _laserWeaponData.LaserDuration);
+        private void UpdateBeamTransform()
+        {
+            if (_activeBeam == null) return;
+            _activeBeam.transform.SetParent(Muzzle, worldPositionStays: true);
+            _activeBeam.transform.position = Muzzle.position;
+            _activeBeam.transform.rotation = Muzzle.rotation;
         }
 
         private void StopBeam()
@@ -98,8 +109,34 @@ namespace ShapeDefense.Scripts.Weapons
 
         private void OnDisable()
         {
-            CancelInvoke(nameof(StopBeam));
             StopBeam();
+        }
+
+        public override void StopFire()
+        {
+            base.StopFire();
+            StopBeam();
+        }
+
+        protected override void Update()
+        {
+            base.Update();
+
+            if (_activeBeam != null)
+            {
+                if (!_activeBeam.IsActive)
+                {
+                    _activeBeam = null;
+                    return;
+                }
+
+                UpdateBeamTransform();
+
+                if (!_isFiring || (LaserWeaponData.LaserDuration > 0f && Time.time >= _beamEndTime))
+                {
+                    StopBeam();
+                }
+            }
         }
     }
 }
