@@ -49,6 +49,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShapeDefense.Scripts.PlayerCore
   _health: {fileID: 3280257096560006908}
+  _weaponController: {fileID: 0}
 --- !u!114 &3280257096560006908
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -61,8 +62,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed83666d93e14552abaedd5f2c4e3466, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShapeDefense.Scripts.Health
-  _maxHp: 10
-  _destroyOnDeath: 1
+  uniqueId: 0
+  teamKey: 0
+  maxHp: 10
+  destroyOnDeath: 1
 --- !u!33 &7645096030311316492
 MeshFilter:
   m_ObjectHideFlags: 0

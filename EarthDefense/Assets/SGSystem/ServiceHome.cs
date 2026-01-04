@@ -31,6 +31,9 @@ namespace SG
             {
                 _installer( this );
             }
+
+            await InitService();
+            await PrepareService();
         }
         
         public async UniTask Init( Action<ServiceHome> installer )

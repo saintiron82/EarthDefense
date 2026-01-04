@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 3235131149997961078}
   - component: {fileID: 4205818071933624325}
   - component: {fileID: 4653008072092851979}
+  - component: {fileID: -6882214583816650717}
   m_Layer: 0
   m_Name: Enemy
   m_TagString: Untagged
@@ -135,9 +136,12 @@ MonoBehaviour:
   radialCells: 5
   useRadialStep: 0
   radialStep: 5
-  cellHp: 60
+  cellHp: 5
   discreteCells: 1
   preErodeVisual: 0
+  showCellHpGizmos: 1
+  gizmoTextSize: 0.2
+  onlyShowDamagedCells: 1
 --- !u!114 &4653008072092851979
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -155,7 +159,24 @@ MonoBehaviour:
   damageMask: {fileID: 4205818071933624325}
   baseOuterRadius: 6
   thickness: 1
+  radialSpeed: 0.75
   reachRadius: 1.2
   dealContactDamage: 0
   contactDamage: 2
   contactCooldown: 0.25
+--- !u!114 &-6882214583816650717
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1388172984150260331}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed83666d93e14552abaedd5f2c4e3466, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ShapeDefense.Scripts.Health
+  uniqueId: 0
+  teamKey: 0
+  maxHp: 10
+  destroyOnDeath: 1

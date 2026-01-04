@@ -1,4 +1,5 @@
-﻿using Cysharp.Threading.Tasks;
+﻿using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using SG.Audio;
 using SG.Save;
@@ -14,6 +15,9 @@ namespace SG
         public static bool Nosave;
         public static App Instance { get; private set; }
         public ServiceHome ServiceHome { get; private set; }
+
+        [SerializeField]
+        private List<MonoServiceBase> _services;
 
         private void Awake()
         {
@@ -40,7 +44,11 @@ namespace SG
             home.AddNewService<SaveService>();
             home.AddNewService<ManagerMaster>();
             home.AddNewService<UIService>();
-            home.AddMonoService<AudioService>();
+
+            foreach (var service in _services)
+            {
+                home.AddNewService(service);
+            }
         }
 
         private void Update()

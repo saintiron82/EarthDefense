@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 763e77432b67a244dac13d100aeb115f, type: 3}
+  m_Name: ResourceBundle
+  m_EditorClassIdentifier: Assembly-CSharp::Script.SystemCore.Resource.ResourceBundle
+  bundleId: 
+  entries:
+  - id: Enemy
+    addressableKey: 
+    type: 1
+    directAsset: {fileID: 1388172984150260331, guid: 0a063ea005776ad469cf2f9e2c31326f, type: 3}
+    cacheGroup: 
+    poolPresetOverride: {fileID: 0}
+  - id: Bullet
+    addressableKey: 
+    type: 1
+    directAsset: {fileID: 2112185108963435592, guid: dbf33ced806e07e43b248a3f0eb96a22, type: 3}
+    cacheGroup: 
+    poolPresetOverride: {fileID: 0}
+  - id: LaserWeapone
+    addressableKey: 
+    type: 1
+    directAsset: {fileID: 5423637658780602661, guid: b49e075196a37ea4183fd0ae37bb0910, type: 3}
+    cacheGroup: 
+    poolPresetOverride: {fileID: 0}
+  - id: Beam
+    addressableKey: 
+    type: 1
+    directAsset: {fileID: 2883529072434113693, guid: 30a4f35b7b6a7a64a97c4c35e3dca4b3, type: 3}
+    cacheGroup: 
+    poolPresetOverride: {fileID: 0}
+  - id: Gun
+    addressableKey: 
+    type: 1
+    directAsset: {fileID: 3760745422802164631, guid: d35523d5d6e810f40b8fcb14bd27f218, type: 3}
+    cacheGroup: 
+    poolPresetOverride: {fileID: 0}
+  addressableLabels: []
+  defaultPoolPreset: {fileID: 0}

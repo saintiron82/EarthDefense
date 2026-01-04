@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using UnityEngine;
 
 namespace ShapeDefense.Scripts
@@ -40,20 +40,31 @@ namespace ShapeDefense.Scripts
 
         [Header("Erosion")]
         [Tooltip("damageDepth 1.0에 도달하기까지 필요한 누적 피해량. (HP 개념)")]
-        [SerializeField, Min(0.001f)] private float cellHp = 60f;
+        [SerializeField, Min(0.001f)] private float cellHp = 30f;  // 기본 데미지 5 기준 6발로 파괴
 
         [Header("Mode")]
         [Tooltip("켜면 셀은 부분 침식 없이, 누적 데미지가 cellHp 이상이면 즉시 '완전 제거'됩니다.")]
         [SerializeField] private bool discreteCells = true;
 
         [Tooltip("discreteCells=true일 때, 파괴 직전의 얇은 '파임' 표현을 살짝 줄지(0=없음). ")]
-        [SerializeField, Range(0f, 0.25f)] private float preErodeVisual = 0.0f;
+        [SerializeField, Range(0f, 0.25f)] private float preErodeVisual;
+
+        [Header("Debug Gizmos")]
+        [Tooltip("씬 뷰에서 데미지 받은 셀의 HP를 텍스트로 표시합니다.")]
+        [SerializeField] private bool showCellHpGizmos = false;
+        
+        [Tooltip("HP 표시를 위한 텍스트 크기")]
+        [SerializeField] private float gizmoTextSize = 0.2f;
+        
+        [Tooltip("HP가 0보다 큰 셀만 표시")]
+        [SerializeField] private bool onlyShowDamagedCells = true;
 
         private RingSectorMesh _sector;
         private float[] _damage; // 0..cellHp
 
         public int AngleCells => angleCells;
         public int RadialCells => radialCells;
+        public float CellHp => cellHp; // HP 시각화용
 
         private int TotalCells => Mathf.Max(1, angleCells) * Mathf.Max(1, radialCells);
 
@@ -72,30 +83,33 @@ namespace ShapeDefense.Scripts
 
         private void OnValidate()
         {
+            // 에디터에서만: 값 검증 및 클램핑
             angleCells = Mathf.Clamp(angleCells, 1, 64);
             radialCells = Mathf.Clamp(radialCells, 1, 128);
             angleStepDeg = Mathf.Max(0.1f, angleStepDeg);
             radialStep = Mathf.Max(0.01f, radialStep);
 
-            if (_sector == null) _sector = GetComponent<RingSectorMesh>();
-
-            // step 기반이면 현재 섹터 파라미터로 셀 수를 자동 갱신
-            AutoComputeCellsFromSteps();
-
-            EnsureArray();
-
-            if (_sector != null)
+            if (!Application.isPlaying)
             {
-                _sector.SetDamageMask(this);
+                if (_sector == null) _sector = GetComponent<RingSectorMesh>();
+                AutoComputeCellsFromSteps();
+                EnsureArray();
+                if (_sector != null) _sector.SetDamageMask(this);
             }
         }
 
         private void OnEnable()
         {
+            // 런타임: 레지스트리 등록만
             if (_sector == null) _sector = GetComponent<RingSectorMesh>();
-            AutoComputeCellsFromSteps();
-            EnsureArray();
             if (_sector != null) _sector.SetDamageMask(this);
+            
+            DamageableRegistry.Register(this);
+        }
+
+        private void OnDisable()
+        {
+            DamageableRegistry.Unregister(this);
         }
 
         private void AutoComputeCellsFromSteps()
@@ -215,10 +229,14 @@ namespace ShapeDefense.Scripts
             ApplyDamage(ToIndex(aIdx, rIdx), amount);
         }
 
-        // 기존 API 유지(각도만): radialIndex=0에 데미지
-        public void DamageByAngle(float hitAngleDeg, float amount)
+
+        /// <summary>
+        /// 셀 인덱스로 직접 데미지를 적용합니다. (이미 인덱스를 계산한 경우 사용)
+        /// </summary>
+        public void DamageByCellIndex(int angleIndex, int radiusIndex, float amount)
         {
-            DamageByAngleRadius(hitAngleDeg, _sector != null ? _sector.InnerRadius : 0f, amount);
+            EnsureArray();
+            ApplyDamage(ToIndex(angleIndex, radiusIndex), amount);
         }
 
         private void ApplyDamage(int cellIndex, float amount)
@@ -255,5 +273,205 @@ namespace ShapeDefense.Scripts
             // Unity의 Mathf.DeltaAngle은 -180..180 반환
             return Mathf.DeltaAngle(fromDeg, toDeg);
         }
+
+        /// <summary>
+        /// 주어진 월드 히트 위치를 이 섹터의 (angleIndex, radialIndex) 셀로 매핑합니다.
+        /// 섹터 영역 밖이면 false를 반환합니다.
+        /// </summary>
+        public bool TryGetCellFromWorldPoint(Vector2 worldPoint, out int angleIndex, out int radialIndex)
+        {
+            angleIndex = 0;
+            radialIndex = 0;
+
+            if (_sector == null) _sector = GetComponent<RingSectorMesh>();
+            if (_sector == null) return false;
+
+            // 1. 피봇(원점) 기준 극좌표 변환
+            var pivotPos = (Vector2)_sector.transform.position;
+            var offset = worldPoint - pivotPos;
+            
+            if (offset.sqrMagnitude <= 0.000001f) return false;
+
+            var hitRadius = offset.magnitude;
+            var hitAngleDeg = Mathf.Atan2(offset.y, offset.x) * Mathf.Rad2Deg;
+
+            // 2. 반지름 범위 체크 (메시가 그려진 링 영역)
+            var rInner = _sector.InnerRadius;
+            var rOuter = _sector.InnerRadius + _sector.Thickness;
+            if (hitRadius < rInner || hitRadius > rOuter) return false;
+
+            // 3. 각도 범위 체크
+            var sectorStart = _sector.StartAngleDeg;
+            var sectorArc = Mathf.Clamp(_sector.ArcAngleDeg, 0.01f, 360f);
+            
+            // 각도를 -180~180 범위로 정규화
+            hitAngleDeg = Mathf.Repeat(hitAngleDeg + 180f, 360f) - 180f;
+            sectorStart = Mathf.Repeat(sectorStart + 180f, 360f) - 180f;
+
+            int aIdx;
+            if (sectorArc >= 359.999f)
+            {
+                // 전체 원: 각도를 0~360으로 매핑
+                var normalized = Mathf.Repeat(hitAngleDeg + 180f, 360f);
+                aIdx = Mathf.FloorToInt(normalized / 360f * angleCells);
+            }
+            else
+            {
+                // 부채꼴: 섹터 각도 범위 내인지 체크
+                var deltaAngle = Mathf.DeltaAngle(sectorStart, hitAngleDeg);
+                if (deltaAngle < 0f) deltaAngle += 360f;
+                
+                if (deltaAngle > sectorArc) return false;
+                
+                var t = Mathf.Clamp01(deltaAngle / sectorArc);
+                aIdx = Mathf.FloorToInt(t * angleCells);
+            }
+
+            // 4. 반지름 셀 인덱스 계산
+            var radialT = Mathf.InverseLerp(rInner, rOuter, hitRadius);
+            int rIdx = Mathf.FloorToInt(radialT * radialCells);
+
+            // 5. 인덱스 클램핑
+            angleIndex = Mathf.Clamp(aIdx, 0, angleCells - 1);
+            radialIndex = Mathf.Clamp(rIdx, 0, radialCells - 1);
+            return true;
+        }
+
+        /// <summary>
+        /// 주어진 월드 히트 위치가 '이미 파괴된 셀'에 해당하면 true.
+        /// 섹터 밖이면 false(=막힌/없는 셀이므로 따로 처리 필요)로 둡니다.
+        /// </summary>
+        public bool IsDestroyedAtWorldPoint(Vector2 worldPoint)
+        {
+            EnsureArray();
+            if (!TryGetCellFromWorldPoint(worldPoint, out var aIdx, out var rIdx)) return false;
+            return IsCellDestroyed(ToIndex(aIdx, rIdx));
+        }
+
+        /// <summary>
+        /// 주어진 월드 포인트가 이 조각(섹터) 영역 안에서 '막힌(solid) 부분'이면 true.
+        /// 즉, 해당 셀이 아직 파괴되지 않았다면(=구멍이 아니라면) solid 입니다.
+        /// 
+        /// - 섹터 밖이면 false (이 조각과 무관)
+        /// - 파괴된 셀(구멍)이면 false
+        /// - 남아있는 셀이면 true
+        /// </summary>
+        public bool IsSolidAtWorldPoint(Vector2 worldPoint)
+        {
+            EnsureArray();
+            if (!TryGetCellFromWorldPoint(worldPoint, out var aIdx, out var rIdx)) return false;
+            return !IsCellDestroyed(ToIndex(aIdx, rIdx));
+        }
+
+
+        /// <summary>
+        /// 셀(각도/반지름 인덱스)로부터 고유 ID를 계산합니다. angleIndex/radiusIndex는 유효 범위여야 합니다.
+        /// </summary>
+        public int GetCellUniqueId(int angleIndex, int radiusIndex)
+        {
+            // 간단 조합: (루트 InstanceID * 1_000_000) + (radiusIndex * AngleCells) + angleIndex
+            var rootId = transform.root.GetInstanceID();
+            return rootId * 1_000_000 + radiusIndex * Mathf.Max(1, AngleCells) + angleIndex;
+        }
+
+        /// <summary>
+        /// 아직 파괴되지 않은 셀이 하나라도 남아있는지 확인합니다.
+        /// </summary>
+        public bool HasIntactCell()
+        {
+            if (_damage == null || _damage.Length == 0) return true;
+            var total = _damage.Length;
+            var hp = cellHp;
+            for (int i = 0; i < total; i++)
+            {
+                if (_damage[i] < hp)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+#if UNITY_EDITOR
+        private void OnDrawGizmos()
+        {
+            if (!showCellHpGizmos) return;
+            if (_sector == null) _sector = GetComponent<RingSectorMesh>();
+            if (_sector == null || _damage == null) return;
+
+            var pivotPos = transform.position;
+            
+            // 각 셀의 중심 위치에 HP 표시
+            for (int rIdx = 0; rIdx < radialCells; rIdx++)
+            {
+                for (int aIdx = 0; aIdx < angleCells; aIdx++)
+                {
+                    int cellIdx = ToIndex(aIdx, rIdx);
+                    float dmg = _damage[cellIdx];
+                    
+                    // onlyShowDamagedCells가 켜져있으면 데미지 받은 셀만 표시
+                    if (onlyShowDamagedCells && dmg <= 0.001f) continue;
+                    
+                    // 셀의 월드 위치 계산
+                    var cellPos = GetCellWorldPosition(aIdx, rIdx);
+                    
+                    // HP 비율에 따라 색상 변경
+                    float hpRatio = 1f - Mathf.Clamp01(dmg / cellHp);
+                    Color color = Color.Lerp(Color.red, Color.green, hpRatio);
+                    
+                    // 파괴된 셀은 검정색
+                    if (IsCellDestroyed(cellIdx))
+                    {
+                        color = Color.black;
+                    }
+                    
+                    // 텍스트 그리기
+                    UnityEditor.Handles.color = color;
+                    var style = new GUIStyle();
+                    style.normal.textColor = color;
+                    style.fontSize = Mathf.RoundToInt(gizmoTextSize * 100f);
+                    style.alignment = TextAnchor.MiddleCenter;
+                    
+                    string text = IsCellDestroyed(cellIdx) ? "X" : $"{dmg:F0}/{cellHp:F0}";
+                    UnityEditor.Handles.Label(cellPos, text, style);
+                    
+                    // 셀 경계 표시 (선택적)
+                    Gizmos.color = new Color(color.r, color.g, color.b, 0.3f);
+                    Gizmos.DrawWireSphere(cellPos, 0.1f);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// 셀의 월드 위치를 계산합니다 (시각화용)
+        /// </summary>
+        private Vector3 GetCellWorldPosition(int angleIndex, int radiusIndex)
+        {
+            if (_sector == null) return transform.position;
+            
+            // 셀의 중심 각도 계산
+            float sectorStart = _sector.StartAngleDeg;
+            float sectorArc = _sector.ArcAngleDeg;
+            float cellArcSize = sectorArc / Mathf.Max(1, angleCells);
+            float cellAngle = sectorStart + (angleIndex + 0.5f) * cellArcSize;
+            
+            // 셀의 중심 반지름 계산
+            float innerR = _sector.InnerRadius;
+            float outerR = innerR + _sector.Thickness;
+            float cellRadialSize = _sector.Thickness / Mathf.Max(1, radialCells);
+            float cellRadius = innerR + (radiusIndex + 0.5f) * cellRadialSize;
+            
+            // 극좌표 -> 직교좌표 변환
+            float angleRad = cellAngle * Mathf.Deg2Rad;
+            Vector3 offset = new Vector3(
+                Mathf.Cos(angleRad) * cellRadius,
+                Mathf.Sin(angleRad) * cellRadius,
+                0f
+            );
+            
+            return transform.position + offset;
+        }
+#endif
     }
 }
+

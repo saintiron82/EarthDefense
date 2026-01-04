@@ -415,6 +415,7 @@ namespace Script.SystemCore.Resource
 
         public void LogCacheStatus()
         {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             Debug.Log("=== ResourceService Cache Status ===");
             Debug.Log($"Total cached: {(_cache != null ? _cache.Count : 0)}");
             Debug.Log($"Groups: {(_groupToIds != null ? _groupToIds.Count : 0)}");
@@ -426,6 +427,7 @@ namespace Script.SystemCore.Resource
                     Debug.Log($"  [{kvp.Key}]: {kvp.Value.Count} items");
                 }
             }
+#endif
         }
 
         public override void Release()

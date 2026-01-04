@@ -144,6 +144,9 @@ namespace SG.Audio
 
         private void CleanupInvalidHandles()
         {
+            if( _handlesToCleanup == null )
+                return;
+            
             _handlesToCleanup.Clear();
 
             foreach (var kvp in _activeHandles)
@@ -576,6 +579,8 @@ namespace SG.Audio
         // ==================== Global Control ====================
         public void PauseAll()
         {
+            if( _channelPools == null )
+                return; 
             foreach (var pool in _channelPools.Values)
             {
                 pool.PauseAll();
@@ -584,6 +589,8 @@ namespace SG.Audio
 
         public void ResumeAll()
         {
+            if( _channelPools == null )
+                return;
             foreach (var pool in _channelPools.Values)
             {
                 pool.ResumeAll();
@@ -592,6 +599,8 @@ namespace SG.Audio
 
         public void StopAll()
         {
+            if( _channelPools == null )
+                return;
             foreach (var pool in _channelPools.Values)
             {
                 pool.StopAll();

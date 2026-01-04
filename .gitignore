@@ -101,3 +101,5 @@ EarthDefense/Library/
 EarthDefense/Temp/
 *.vsconfig
 *.dwlt
+EarthDefense/obj/
+EarthDefense/obj/
