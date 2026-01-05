@@ -1,4 +1,5 @@
-using UnityEngine;
+﻿using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace ShapeDefense.Scripts
 {
@@ -38,6 +39,12 @@ namespace ShapeDefense.Scripts
 
         [SerializeField] private Color vertexColor = Color.white;
 
+        [Header("Visual FX")]
+        [SerializeField, Range(0.05f, 1f)] private float baseAlpha = 0.55f;
+        [SerializeField] private Color glowColor = Color.cyan;
+        [SerializeField, Min(0.01f)] private float glowDuration = 0.35f;
+        [SerializeField, Range(0f, 3f)] private float glowIntensity = 1.35f;
+
         private MeshFilter _mf;
         private MeshRenderer _mr;
         private Mesh _mesh;
@@ -45,6 +52,7 @@ namespace ShapeDefense.Scripts
 
         private static readonly int ColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorIdLegacy = Shader.PropertyToID("_Color");
+        private static readonly int RadiusOffsetId = Shader.PropertyToID("_RadiusOffset");
 
         // 피해 마스크(선택). 없으면 기존처럼 단일 링 섹터로 렌더링.
         private RingSectorDamageMask _damageMask;
@@ -57,6 +65,7 @@ namespace ShapeDefense.Scripts
         [SerializeField] private bool flipWinding;
 
         private MaterialPropertyBlock _mpb;
+        private float[] _cellGlowUntil;
 
         public float StartAngleDeg { get => startAngleDeg; set { startAngleDeg = value; MarkDirty(); } }
         public float ArcAngleDeg { get => arcAngleDeg; set { arcAngleDeg = value; MarkDirty(); } }
@@ -64,7 +73,16 @@ namespace ShapeDefense.Scripts
         public float Thickness { get => thickness; set { thickness = Mathf.Max(0.0001f, value); MarkDirty(); } }
         public float OuterRadius => innerRadius + thickness;
 
-        public float RadiusOffset { get => radiusOffset; set { radiusOffset = value; MarkDirty(); } }
+        public float RadiusOffset
+        {
+            get => radiusOffset;
+            set
+            {
+                radiusOffset = value;
+                // Update shader property instead of marking dirty for mesh rebuild
+                ApplyRadiusOffset();
+            }
+        }
 
         /// <summary>
         /// 외부에서(예: 피해 시스템) 메시 리빌드가 필요함을 알리기 위한 API.
@@ -77,6 +95,14 @@ namespace ShapeDefense.Scripts
         public void SetDamageMask(RingSectorDamageMask mask)
         {
             _damageMask = mask;
+            if (_damageMask != null)
+            {
+                EnsureGlowArray(_damageMask.AngleCells, _damageMask.RadialCells);
+            }
+            else
+            {
+                _cellGlowUntil = null;
+            }
             MarkDirty();
         }
 
@@ -92,6 +118,36 @@ namespace ShapeDefense.Scripts
             ApplyPerRendererColor();
         }
 
+        public void PulseCellGlow(int angleIndex, int radialIndex)
+        {
+            if (_damageMask == null) return;
+            EnsureGlowArray(_damageMask.AngleCells, _damageMask.RadialCells);
+            if (_cellGlowUntil == null || _cellGlowUntil.Length == 0) return;
+
+            int aIdx = Mathf.Clamp(angleIndex, 0, _damageMask.AngleCells - 1);
+            int rIdx = Mathf.Clamp(radialIndex, 0, _damageMask.RadialCells - 1);
+            int idx = rIdx * _damageMask.AngleCells + aIdx;
+            _cellGlowUntil[idx] = Time.time + glowDuration;
+
+            // Immediately update vertex colors
+            ApplyVertexColor();
+        }
+
+        private void EnsureGlowArray(int angleCells, int radialCells)
+        {
+            int total = Mathf.Max(0, angleCells) * Mathf.Max(0, radialCells);
+            if (total <= 0)
+            {
+                _cellGlowUntil = null;
+                return;
+            }
+
+            if (_cellGlowUntil == null || _cellGlowUntil.Length != total)
+            {
+                _cellGlowUntil = new float[total];
+            }
+        }
+
         private void Reset()
         {
             _mf = GetComponent<MeshFilter>();
@@ -105,10 +161,10 @@ namespace ShapeDefense.Scripts
             EnsureMaterial();
             EnsureMpb();
 
-            // MeshRenderer가 꺼져있거나 머티리얼이 null이면 화면에 아무 것도 나오지 않음
             if (_mr != null) _mr.enabled = true;
 
             RebuildIfNeeded(force: true);
+            ApplyRadiusOffset();
             ApplyPerRendererColor();
         }
 
@@ -120,6 +176,7 @@ namespace ShapeDefense.Scripts
             EnsureMpb();
             if (_mr != null) _mr.enabled = true;
             RebuildIfNeeded(force: true);
+            ApplyRadiusOffset();
             ApplyPerRendererColor();
         }
 
@@ -133,14 +190,23 @@ namespace ShapeDefense.Scripts
             EnsureMesh();
             EnsureMaterial();
             RebuildIfNeeded(force: true);
+            ApplyColor();
+            ApplyVertexColor();
+            ApplyPerRendererColor();
         }
 
         private void Update()
         {
             // ExecuteAlways 환경에서 값이 변경되면 리빌드
             RebuildIfNeeded(force: false);
+            
+            // Always update vertex colors to reflect glow state changes
+            if (_damageMask != null && _cellGlowUntil != null)
+            {
+                ApplyVertexColor();
+            }
+            
             ApplyColor();
-            ApplyVertexColor();
             ApplyPerRendererColor();
         }
 
@@ -199,10 +265,61 @@ namespace ShapeDefense.Scripts
                 name = "RingSector_AutoMaterial"
             };
 
+            ConfigureBlendForTransparency(mat);
             _mr.sharedMaterial = mat;
 
             // 생성 직후 색 적용(머티리얼 프로퍼티명이 셰이더마다 달라질 수 있어 ApplyColor에서 다시 처리)
             ApplyColor();
+        }
+
+        private void ConfigureBlendForTransparency(Material mat)
+        {
+            bool wantTransparent = baseAlpha < 0.999f || (useVertexColor && vertexColor.a < 0.999f);
+
+            if (mat.HasProperty("_Surface"))
+            {
+                mat.SetFloat("_Surface", wantTransparent ? 1f : 0f); // 1=Transparent, 0=Opaque
+                mat.SetOverrideTag("RenderType", wantTransparent ? "Transparent" : "Opaque");
+                mat.SetFloat("_AlphaClip", 0f);
+                mat.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
+                mat.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
+                mat.SetInt("_BlendOp", (int)BlendOp.Add);
+                if (mat.HasProperty("_ZWrite")) mat.SetFloat("_ZWrite", wantTransparent ? 0f : 1f);
+                mat.renderQueue = wantTransparent ? (int)RenderQueue.Transparent : (int)RenderQueue.Geometry;
+                if (wantTransparent)
+                {
+                    mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                    mat.EnableKeyword("_ALPHAPREMULTIPLY_ON");
+                    mat.DisableKeyword("_ALPHATEST_ON");
+                }
+                else
+                {
+                    mat.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                    mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                }
+            }
+            else
+            {
+                // Built-in/legacy Unlit
+                mat.SetOverrideTag("RenderType", wantTransparent ? "Transparent" : "Opaque");
+                mat.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
+                mat.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
+                mat.SetInt("_ZWrite", wantTransparent ? 0 : 1);
+                mat.SetInt("_BlendOp", (int)BlendOp.Add);
+                mat.renderQueue = wantTransparent ? (int)RenderQueue.Transparent : (int)RenderQueue.Geometry;
+            }
+        }
+
+        private void ApplyRadiusOffset()
+        {
+            if (_mr == null) return;
+            var mat = _mr.sharedMaterial;
+            if (mat == null) return;
+
+            EnsureMpb();
+            _mr.GetPropertyBlock(_mpb);
+            _mpb.SetFloat(RadiusOffsetId, radiusOffset);
+            _mr.SetPropertyBlock(_mpb);
         }
 
         private void ApplyPerRendererColor()
@@ -213,8 +330,9 @@ namespace ShapeDefense.Scripts
 
             EnsureMpb();
 
-            // 조각별 색은 vertexColor를 우선 사용 (스포너에서 SetVertexColor로 주입)
-            var c = vertexColor;
+            // Use base alpha for transparency control, but don't override vertex colors
+            var c = Color.white;
+            c.a = baseAlpha;
 
             _mr.GetPropertyBlock(_mpb);
             if (mat.HasProperty(ColorId)) _mpb.SetColor(ColorId, c);
@@ -234,9 +352,14 @@ namespace ShapeDefense.Scripts
                 mat.SetFloat("_Cull", 0f); // Off
             }
 
+            ConfigureBlendForTransparency(mat);
+
+            var baseColorWithAlpha = color;
+            baseColorWithAlpha.a *= baseAlpha;
+
             // '공유 머티리얼'의 기본색은 color로 유지(전역/디폴트)
-            if (mat.HasProperty(ColorId)) mat.SetColor(ColorId, color);
-            else if (mat.HasProperty(ColorIdLegacy)) mat.SetColor(ColorIdLegacy, color);
+            if (mat.HasProperty(ColorId)) mat.SetColor(ColorId, baseColorWithAlpha);
+            else if (mat.HasProperty(ColorIdLegacy)) mat.SetColor(ColorIdLegacy, baseColorWithAlpha);
         }
 
         private void ApplyVertexColor()
@@ -244,10 +367,8 @@ namespace ShapeDefense.Scripts
             if (!useVertexColor) return;
             if (_mesh == null) return;
 
-            // mesh가 아직 생성 전이면 다음 프레임에 적용
-            var vc = (Color32)vertexColor;
+            var vc = vertexColor;
 
-            // vertices가 없으면 중단
             var vCount = _mesh.vertexCount;
             if (vCount <= 0) return;
 
@@ -257,7 +378,60 @@ namespace ShapeDefense.Scripts
                 cols = new Color32[vCount];
             }
 
-            for (int i = 0; i < vCount; i++) cols[i] = vc;
+            if (_damageMask == null)
+            {
+                var c32 = (Color32)vc;
+                c32.a = 50; // base visibility (no glow)
+                for (int i = 0; i < vCount; i++) cols[i] = c32;
+                _mesh.colors32 = cols;
+                return;
+            }
+
+            int angleCells = Mathf.Max(1, _damageMask.AngleCells);
+            int radialCells = Mathf.Max(1, _damageMask.RadialCells);
+            EnsureGlowArray(angleCells, radialCells);
+
+            var uvs = _mesh.uv;
+            int glowLen = _cellGlowUntil != null ? _cellGlowUntil.Length : 0;
+            float duration = Mathf.Max(0.0001f, glowDuration);
+
+            for (int i = 0; i < vCount; i++)
+            {
+                var uv = uvs != null && uvs.Length > i ? uvs[i] : Vector2.zero;
+                int aIdx = Mathf.Clamp(Mathf.FloorToInt(uv.x * angleCells), 0, angleCells - 1);
+                int rIdx = Mathf.Clamp(Mathf.FloorToInt(uv.y * radialCells), 0, radialCells - 1);
+                int cellIdx = rIdx * angleCells + aIdx;
+
+                float erosion = _damageMask.GetCellErosion01(aIdx, rIdx);
+
+                float glow = 0f;
+                if( cellIdx >= 0 && cellIdx < glowLen)
+                {
+                    float remaining = _cellGlowUntil[cellIdx] - Time.time;
+                    if (remaining > 0f)
+                    {
+                        glow = Mathf.Clamp01(remaining / duration);
+                    }
+                }
+
+                // Mix vertex color with glow color based on glow intensity
+                float glowFactor = glow * glowIntensity;
+                var mixed = Color.Lerp(vc, glowColor, Mathf.Clamp01(glowFactor));
+                
+                // Apply erosion darkening only when no glow
+                if (glow < 0.01f)
+                {
+                    float alphaFactor = Mathf.Clamp01(1f - 0.4f * erosion);
+                    mixed.r *= alphaFactor;
+                    mixed.g *= alphaFactor;
+                    mixed.b *= alphaFactor;
+                }
+
+                var c32 = (Color32)mixed;
+                // Base visibility 50, glow cells go up to 255
+                c32.a = (byte)Mathf.Clamp(50 + Mathf.RoundToInt(glowFactor * 205f), 50, 255);
+                cols[i] = c32;
+            }
 
             _mesh.colors32 = cols;
         }
@@ -272,7 +446,7 @@ namespace ShapeDefense.Scripts
                 h = h * 31 + innerRadius.GetHashCode();
                 h = h * 31 + thickness.GetHashCode();
                 h = h * 31 + segments;
-                h = h * 31 + radiusOffset.GetHashCode();
+                // radiusOffset no longer affects mesh geometry
                 return h;
             }
         }
@@ -287,25 +461,21 @@ namespace ShapeDefense.Scripts
                 hash = unchecked(hash * 31 + _damageMask.AngleCells);
                 hash = unchecked(hash * 31 + _damageMask.RadialCells);
 
-                // 2D(각도 x 반지름) 전체 셀 상태를 해시에 반영
-                for (int r = 0; r < _damageMask.RadialCells; r++)
-                {
-                    for (int a = 0; a < _damageMask.AngleCells; a++)
-                    {
-                        hash = unchecked(hash * 31 + _damageMask.GetCellErosion01(a, r).GetHashCode());
-                    }
-                }
+                EnsureGlowArray(_damageMask.AngleCells, _damageMask.RadialCells);
+
+                // Erosion is visual-only and doesn't affect mesh topology
+                // Only rebuild when cell count changes, not when erosion values change
             }
 
             if (!force && hash == _lastHash) return;
             _lastHash = hash;
 
-            var rInner = innerRadius + radiusOffset;
-            var rOuter = innerRadius + thickness + radiusOffset;
+            // Build mesh without radius offset (offset handled by shader)
+            var rInner = innerRadius;
+            var rOuter = innerRadius + thickness;
 
-            // 2D에서는 반지름이 너무 작거나 뒤집히면 bounds/클리핑 문제로 아예 안 보이는 경우가 많음
             rInner = Mathf.Max(0f, rInner);
-            rOuter = Mathf.Max(rInner + 0.01f, rOuter); // 최소 두께 확보
+            rOuter = Mathf.Max(rInner + 0.01f, rOuter);
 
             if (_damageMask == null)
             {
@@ -332,7 +502,7 @@ namespace ShapeDefense.Scripts
             var startRad = startDeg * Mathf.Deg2Rad;
             var arcRad = arcDeg * Mathf.Deg2Rad;
 
-            // UV는 단순히 원호 진행도를 x로, inner/outer를 y로 둔다.
+            // UV는 단순히 원호 진행도를 x로, inner/outer을 y로 둔다.
             // 나중에 셰이더에서 그라데이션/노이즈 넣기 좋다.
             for (int i = 0; i <= seg; i++)
             {
@@ -402,7 +572,7 @@ namespace ShapeDefense.Scripts
 
             // 반지름 방향 스트립 분할 수: radialCells
             // 각도 방향 정점 분할 수: seg
-            // vertices: 각 (angle step)마다 (radialCells+1)개의 반지름 정점을 둔다.
+            // vertices: 각 (angle step)마다 (radialCells+1)개의 반지름 정점을 돼다.
             var vertexCols = seg + 1;
             var vertexRows = radialCells + 1;
             var vertexCount = vertexCols * vertexRows;

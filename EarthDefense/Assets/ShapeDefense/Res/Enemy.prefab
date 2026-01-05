@@ -70,7 +70,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 0}
+  - {fileID: 2100000, guid: 5da1eea576ca34a42acf9a5b9d369a0b, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -112,10 +112,14 @@ MonoBehaviour:
   thickness: 0.5
   segments: 24
   color: {r: 1, g: 1, b: 1, a: 1}
-  autoCreateMaterial: 1
+  autoCreateMaterial: 0
   radiusOffset: 0
   useVertexColor: 1
   vertexColor: {r: 1, g: 1, b: 1, a: 1}
+  baseAlpha: 0.55
+  glowColor: {r: 0, g: 1, b: 1, a: 1}
+  glowDuration: 0.35
+  glowIntensity: 1.35
   forceDoubleSided: 1
   flipWinding: 1
 --- !u!114 &4205818071933624325

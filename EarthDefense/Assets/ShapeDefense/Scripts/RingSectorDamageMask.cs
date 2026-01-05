@@ -1,4 +1,4 @@
-﻿﻿using System;
+﻿using System;
 using UnityEngine;
 
 namespace ShapeDefense.Scripts
@@ -226,6 +226,7 @@ namespace ShapeDefense.Scripts
             var tR = Mathf.InverseLerp(rInner, rOuter, hitRadius);
             int rIdx = Mathf.Clamp(Mathf.FloorToInt(tR * radialCells), 0, radialCells - 1);
 
+            _sector.PulseCellGlow(aIdx, rIdx);
             ApplyDamage(ToIndex(aIdx, rIdx), amount);
         }
 
@@ -236,6 +237,7 @@ namespace ShapeDefense.Scripts
         public void DamageByCellIndex(int angleIndex, int radiusIndex, float amount)
         {
             EnsureArray();
+            _sector?.PulseCellGlow(angleIndex, radiusIndex);
             ApplyDamage(ToIndex(angleIndex, radiusIndex), amount);
         }
 
