@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Script.SystemCore.Pool;
 using ShapeDefense.Scripts.Data;
 using UnityEngine;
@@ -17,8 +17,7 @@ namespace ShapeDefense.Scripts.Weapons
 
         private LaserWeaponData _laserWeaponData;
         private BeamProjectile _activeBeam;
-        private float _beamEndTime;
-        
+ 
         protected IObjectPool<BeamProjectile> _projectilePool;
 
         private LaserWeaponData LaserWeaponData => _laserWeaponData ?? throw new InvalidOperationException("LaserWeapon not initialized with LaserWeaponData");
@@ -44,19 +43,26 @@ namespace ShapeDefense.Scripts.Weapons
         protected override void FireInternal(Vector2 direction)
         {
             if (!CanFire) return;
-            _nextFireTime = Time.time + (1f / FireRate);
 
-            // 재발사 입력 시 기존 빔 연장만
-            if (_activeBeam != null && _activeBeam.IsActive)
+            // 기존 빔은 소멸 시퀀스로 전환하고 새 빔 생성
+            if (_activeBeam != null)
             {
-                UpdateBeamTransform();
-                _beamEndTime = Time.time + LaserWeaponData.LaserDuration;
-                return;
+                StopBeam();
+            }
+
+            // 자동 모드: 발사 중에는 쿨다운을 멈춰서 빔 유지, 중지 시점에만 쿨다운 적용
+            if (CurrentFireMode == FireMode.Automatic)
+            {
+                _nextFireTime = float.MaxValue;
+            }
+            else
+            {
+                _nextFireTime = Time.time + (1f / FireRate);
             }
 
             SpawnBeam();
         }
-        
+ 
         private void SpawnBeam()
         {
             var bundleId = _laserWeaponData.ProjectileBundleId;
@@ -68,12 +74,12 @@ namespace ShapeDefense.Scripts.Weapons
             }
 
             _activeBeam = beam;
-            _beamEndTime = Time.time + LaserWeaponData.LaserDuration;
 
             UpdateBeamTransform();
 
-            // Beam 자체가 방향/틱을 관리하므로 speed=0, lifetime은 넉넉히(리트랙트 호출로 종료)
-            beam.Fire(Vector2.zero, ProjectileDamage, 0f, LaserWeaponData.LaserDuration * 2f, int.MaxValue, _source, _sourceTeamKey);
+            // Beam 자체가 방향/틱을 관리하므로 speed=0, lifetime은 입력 홀드와 동기화(무한 지속)
+            const float infiniteLifetime = float.MaxValue;
+            beam.Fire(Vector2.zero, ProjectileDamage, 0f, infiniteLifetime, int.MaxValue, _source, _sourceTeamKey);
             beam.Configure(
                 LaserWeaponData.LaserWidth,
                 LaserWeaponData.HitRadius,
@@ -87,7 +93,8 @@ namespace ShapeDefense.Scripts.Weapons
                 LaserWeaponData.LaserColor,
                 hitEffect);
 
-            beam.OverrideMaxHits(LaserWeaponData.BeamMaxHits);
+            var maxHits = LaserWeaponData.BeamMaxHits <= 0 ? int.MaxValue : LaserWeaponData.BeamMaxHits;
+            beam.OverrideMaxHits(maxHits);
         }
 
         private void UpdateBeamTransform()
@@ -115,7 +122,22 @@ namespace ShapeDefense.Scripts.Weapons
         public override void StopFire()
         {
             base.StopFire();
-            StopBeam();
+
+            if (_activeBeam != null && _activeBeam.IsActive)
+            {
+                // 현재 방향으로 분리 후 리트랙트 이동
+                var dir = (Vector2)_activeBeam.transform.right;
+                var travelSpeed = LaserWeaponData.LaserExtendSpeed;
+                var remainLifetime = LaserWeaponData.LaserDuration > 0f ? LaserWeaponData.LaserDuration : 1f;
+                _activeBeam.DetachAndExpire(dir, travelSpeed, remainLifetime);
+                _activeBeam = null;
+            }
+
+            // 자동 모드에서 끊을 때만 쿨다운 재적용
+            if (CurrentFireMode == FireMode.Automatic)
+            {
+                _nextFireTime = Time.time + (1f / FireRate);
+            }
         }
 
         protected override void Update()
@@ -127,14 +149,11 @@ namespace ShapeDefense.Scripts.Weapons
                 if (!_activeBeam.IsActive)
                 {
                     _activeBeam = null;
-                    return;
                 }
 
-                UpdateBeamTransform();
-
-                if (!_isFiring || (LaserWeaponData.LaserDuration > 0f && Time.time >= _beamEndTime))
+                if (_isFiring)
                 {
-                    StopBeam();
+                    UpdateBeamTransform();
                 }
             }
         }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 
 namespace ShapeDefense.Scripts
@@ -6,15 +6,15 @@ namespace ShapeDefense.Scripts
     public sealed class Health : MonoBehaviour, IDamageable
     {
         [Header("Identity")]
-        [Tooltip("개별 Health를 구분하기 위한 고유 ID. 0이면 런타임에서 InstanceID로 자동 채워집니다.")]
-        [SerializeField] private int uniqueId;
+        [Tooltip("개별 Health를 구분하기 위한 고유 ID. 자동으로 InstanceID를 사용합니다.")]
+        [SerializeField, HideInInspector] private int uniqueId;
         [Tooltip("팀/아군 구분 키(예: 0=중립, 1=플레이어, 2=적 등).")]
         [SerializeField] private int teamKey;
 
         [SerializeField] private float maxHp = 10f;
         [SerializeField] private bool destroyOnDeath = true;
 
-        public int UniqueId => uniqueId != 0 ? uniqueId : GetInstanceID();
+        public int UniqueId => uniqueId;
         public int TeamKey => teamKey;
         public float MaxHp => maxHp;
         public float Hp { get; private set; }
@@ -25,7 +25,7 @@ namespace ShapeDefense.Scripts
 
         private void Awake()
         {
-            if (uniqueId == 0) uniqueId = GetInstanceID();
+            uniqueId = GetInstanceID();
             Hp = maxHp;
         }
 

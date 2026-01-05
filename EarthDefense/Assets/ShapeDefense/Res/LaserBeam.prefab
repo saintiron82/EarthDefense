@@ -57,7 +57,7 @@ MonoBehaviour:
   beamColor: {r: 0, g: 1, b: 1, a: 1}
   hitEffect: {fileID: 0}
   extendSpeed: 50
-  retractSpeed: 70
+  retractSpeed: 10
   maxLength: 50
   sweepSteps: 12
   sweepEpsilon: 0

@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace ShapeDefense.Scripts.Weapons
 {
@@ -25,6 +25,9 @@ namespace ShapeDefense.Scripts.Weapons
         private float _nextTickTime;
         private float _tickRate = 5f;
         private bool _isRetracting;
+        private bool _isDetached;
+        private Vector2 _detachDirection = Vector2.right;
+        private float _detachSpeed;
         private int _hitsLeft;
         private Health _blockingHealth;
         private RingSectorDamageMask _blockingChunk;
@@ -54,11 +57,58 @@ namespace ShapeDefense.Scripts.Weapons
             lineRenderer.positionCount = 2;
             lineRenderer.startColor = beamColor;
             lineRenderer.endColor = beamColor;
+
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new[] { new GradientColorKey(beamColor, 0f), new GradientColorKey(beamColor, 1f) },
+                new[] { new GradientAlphaKey(beamColor.a, 0f), new GradientAlphaKey(beamColor.a, 1f) });
+            lineRenderer.colorGradient = gradient;
+
+            if (lineRenderer.material != null)
+            {
+                var mat = lineRenderer.material;
+                mat.color = beamColor;
+                if (mat.HasProperty("_BaseColor"))
+                {
+                    mat.SetColor("_BaseColor", beamColor);
+                }
+                if (mat.HasProperty("_Color"))
+                {
+                    mat.SetColor("_Color", beamColor);
+                }
+                if (mat.HasProperty("_TintColor"))
+                {
+                    mat.SetColor("_TintColor", beamColor);
+                }
+                if (mat.HasProperty("_EmissionColor"))
+                {
+                    mat.EnableKeyword("_EMISSION");
+                    mat.SetColor("_EmissionColor", beamColor);
+                }
+            }
         }
 
         public void BeginRetract()
         {
             _isRetracting = true;
+        }
+
+        public void OverrideMaxHits(int maxHits)
+        {
+            _maxHits = maxHits;
+        }
+
+        public void DetachAndExpire(Vector2 direction, float travelSpeed, float remainingLifetime)
+        {
+            _isRetracting = true;
+            _detachDirection = direction.sqrMagnitude > 0f ? direction.normalized : Vector2.right;
+            _detachSpeed = Mathf.Max(0f, travelSpeed);
+            _isDetached = true;
+            _spawnTime = Time.time;
+            _lifetime = remainingLifetime;
+            ClearBlock();
+            _blockLength = 0f;
+            transform.SetParent(null);
         }
 
         protected override void OnFired()
@@ -67,8 +117,11 @@ namespace ShapeDefense.Scripts.Weapons
             _currentLength = 0f;
             _nextTickTime = Time.time;
             _isRetracting = false;
+            _isDetached = false;
+            _detachSpeed = 0f;
+            _detachDirection = Vector2.right;
             _lastHitTimeByTargetId.Clear();
-            _hitsLeft = MaxHits <= 0 ? 1 : MaxHits;
+            _hitsLeft = MaxHits <= 0 ? int.MaxValue : MaxHits;
             _blockingHealth = null;
             _blockingChunk = null;
             _blockLength = 0f;
@@ -88,6 +141,11 @@ namespace ShapeDefense.Scripts.Weapons
         protected override void UpdateProjectile()
         {
             float delta = Time.deltaTime;
+
+            if (_isDetached && _detachSpeed > 0f)
+            {
+                transform.position += (Vector3)(_detachDirection * _detachSpeed * delta);
+            }
 
             if (_isRetracting)
             {
@@ -147,17 +205,20 @@ namespace ShapeDefense.Scripts.Weapons
                 _currentLength = Mathf.Min(_currentLength, _blockLength);
             }
 
-            if (!_isRetracting && _hitsLeft > 0 && Time.time >= _nextTickTime)
+            if (_hitsLeft > 0 && Time.time >= _nextTickTime)
             {
                 if (hasSweepHit && CanHit(sweepHit))
                 {
                     float damagePerTick = Damage / Mathf.Max(0.0001f, _tickRate);
                     ApplyHit(sweepHit, aimDir, damagePerTick, hitEffect, false);
-                    _hitsLeft = Mathf.Max(0, _hitsLeft - 1);
-
-                    if (_hitsLeft <= 0 || MaxHits <= 1)
+                    if (_hitsLeft != int.MaxValue)
                     {
-                        BeginRetract();
+                        _hitsLeft = Mathf.Max(0, _hitsLeft - 1);
+
+                        if (_hitsLeft <= 0)
+                        {
+                            BeginRetract();
+                        }
                     }
                 }
 
@@ -185,16 +246,14 @@ namespace ShapeDefense.Scripts.Weapons
             _blockLength = 0f;
             _currentLength = 0f;
             _isRetracting = false;
+            _isDetached = false;
+            _detachSpeed = 0f;
+            _detachDirection = Vector2.right;
             _hitsLeft = 0;
             if (lineRenderer != null)
             {
                 lineRenderer.enabled = false;
             }
-        }
-
-        public void OverrideMaxHits(int maxHits)
-        {
-            _maxHits = maxHits;
         }
     }
 }
