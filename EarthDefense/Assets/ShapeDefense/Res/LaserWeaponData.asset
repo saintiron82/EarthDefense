@@ -27,5 +27,14 @@ MonoBehaviour:
   unlockLevel: 0
   unlockCost: 0
   laserDuration: 2
-  damageTickRate: 10
+  damageTickRate: 1
   laserWidth: 0.1
+  laserExtendSpeed: 50
+  laserRetractSpeed: 10
+  beamMaxLength: 50
+  sweepSteps: 12
+  sweepEpsilon: 0
+  hitRadius: 0.07
+  rehitCooldown: 0.05
+  laserColor: {r: 0, g: 1, b: 1, a: 1}
+  beamMaxHits: 1

@@ -145,5 +145,9 @@ MonoBehaviour:
   radiusOffset: 0
   useVertexColor: 1
   vertexColor: {r: 1, g: 1, b: 1, a: 1}
+  baseAlpha: 0.55
+  glowColor: {r: 0, g: 1, b: 1, a: 1}
+  glowDuration: 0.35
+  glowIntensity: 1.35
   forceDoubleSided: 1
   flipWinding: 0

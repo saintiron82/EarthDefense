@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de9cb6152ce7d8746959bedfbf5412e1, type: 3}
+  m_Name: PolarDataConfig
+  m_EditorClassIdentifier: Assembly-CSharp::ShapeDefense.Scripts.Polar.PolarDataConfig
+  sectorCount: 560
+  earthRadius: 0.5
+  initialRadius: 5
+  baseGravityAccel: 0.22
+  gravityMultiplierPerStage: 1.5
+  stageTransitionTime: 30
+  enablePulsation: 1
+  pulsationAmplitude: 0.041
+  pulsationFrequency: 0.7
+  phaseOffset: 0.115
+  usePerlinNoise: 1
+  noiseScale: 2.34
+  pushPower: 2
+  smoothingRadius: 8
+  smoothingStrength: 0.8
+  debugLogInterval: 5
