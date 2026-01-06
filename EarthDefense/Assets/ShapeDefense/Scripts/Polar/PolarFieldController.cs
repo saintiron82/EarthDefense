@@ -26,6 +26,10 @@ namespace ShapeDefense.Scripts.Polar
         // 180개 섹터의 반지름 데이터
         private float[] _sectorRadii;
 
+        // 상처 시스템 (Wound & Recovery Lag)
+        private float[] _recoveryScales;    // 각 섹터의 회복 속도 배율 (0.0 ~ 1.0)
+        private float[] _woundCooldowns;    // 상처 쿨다운 (초)
+
         // 게임 상태
         private bool _isGameOver;
         private float _stageTimer;
@@ -76,16 +80,19 @@ namespace ShapeDefense.Scripts.Polar
 
             float deltaTime = Time.deltaTime;
 
-            // 1. 중력 시뮬레이션: 모든 섹터의 반지름 감소
+            // 1. 상처 회복 업데이트
+            UpdateWoundRecovery(deltaTime);
+
+            // 2. 중력 시뮬레이션: 모든 섹터의 반지름 감소
             ApplyGravity(deltaTime);
 
-            // 2. 게임 오버 체크
+            // 3. 게임 오버 체크
             CheckGameOver();
 
-            // 3. 스테이지 전환 체크
+            // 4. 스테이지 전환 체크
             UpdateStage(deltaTime);
 
-            // 4. 디버그 로그
+            // 5. 디버그 로그
             UpdateDebugLog(deltaTime);
         }
 
@@ -98,31 +105,41 @@ namespace ShapeDefense.Scripts.Polar
             {
                 Debug.LogWarning("[PolarFieldController] Config not assigned during Awake. Using default values.");
                 _sectorRadii = new float[180];
+                _recoveryScales = new float[180];
+                _woundCooldowns = new float[180];
+                
                 for (int i = 0; i < 180; i++)
                 {
                     _sectorRadii[i] = 5.0f;
+                    _recoveryScales[i] = 1.0f;  // 정상 상태
+                    _woundCooldowns[i] = 0f;
                 }
                 return;
             }
 
             int count = config.SectorCount;
             _sectorRadii = new float[count];
+            _recoveryScales = new float[count];
+            _woundCooldowns = new float[count];
+            
             float initialRadius = config.InitialRadius;
 
             for (int i = 0; i < count; i++)
             {
                 _sectorRadii[i] = initialRadius;
+                _recoveryScales[i] = 1.0f;  // 정상 상태
+                _woundCooldowns[i] = 0f;
             }
         }
 
         /// <summary>
-        /// 중력 시뮬레이션: 매 프레임 반지름 감소 + 탄성 복원 + 평활화 + 전역 복원
+        /// 중력 시뮬레이션: 매 프레임 반지름 감소 + 탄성 복원 + 평smooth화 + 전역 복원
         /// HTML applySmoothing() 재현 + 맥동 연동 + 원형 복원
         /// </summary>
         private void ApplyGravity(float deltaTime)
         {
             float reductionAmount = currentGravity * deltaTime;
-            
+
             // ✅ 전체 평균 계산 (목표 반지름)
             float averageRadius = 0f;
             for (int i = 0; i < _sectorRadii.Length; i++)
@@ -130,22 +147,22 @@ namespace ShapeDefense.Scripts.Polar
                 averageRadius += _sectorRadii[i];
             }
             averageRadius /= _sectorRadii.Length;
-            
+
             // ✅ 맥동 시간 동기화 (PolarBoundaryRenderer와 공유)
             // 맥동이 수축할 때 복원력 강화, 팽창할 때 약화
             float pulsationPhase = 0f;
             float smoothingMultiplier = 1f;
-            
+
             if (config != null && config.EnablePulsation)
             {
                 // 사인파: -1 ~ +1
                 pulsationPhase = Mathf.Sin(Time.time * config.PulsationFrequency * Mathf.PI * 2f);
-                
+
                 // 수축 시(음수) 복원력 강화, 팽창 시(양수) 복원력 약화
                 // 범위: 0.7 ~ 1.3
                 smoothingMultiplier = 1f - pulsationPhase * 0.3f;
             }
-            
+
             // HTML의 applySmoothing() 로직을 Unity식으로 이식
             // 밀려난 부분이 옆 섹터들을 끌어당기며 부드럽게 원형을 회복하게 함
             float[] nextRadii = new float[_sectorRadii.Length];
@@ -155,29 +172,36 @@ namespace ShapeDefense.Scripts.Polar
                 // 1. 기본 중력 수축 (HTML: wallRadius[i] -= currentGravity * dt)
                 float newRadius = _sectorRadii[i] - reductionAmount;
 
-                // 2. ✅ 평활화 보정 (HTML: applySmoothing 재현 + 맥동 연동)
+                // 2. ✅ 평smooth화 보정 (HTML: applySmoothing 재현 + 맥동 연동)
                 // 인접 섹터와의 거리를 비교해 너무 튀어나온 부분은 깎고, 들어간 부분은 메꿈
                 int prev = (i - 1 + _sectorRadii.Length) % _sectorRadii.Length;
                 int next = (i + 1) % _sectorRadii.Length;
-                
-                // 주변 값의 평균으로 수렴하려는 성질
-                // 가중치: 현재 90%, 이웃 각 5% (HTML과 동일)
-                // ✅ 맥동에 따라 복원력 조절
-                float baseWeight = 0.9f;
-                float neighborWeight = 0.05f * smoothingMultiplier; // 맥동 연동
-                
-                // 가중치 정규화 (합이 1.0 유지)
-                float totalWeight = baseWeight + neighborWeight * 2f;
-                baseWeight /= totalWeight;
-                neighborWeight /= totalWeight;
-                
-                newRadius = newRadius * baseWeight + (_sectorRadii[prev] + _sectorRadii[next]) * neighborWeight;
-                
-                // 3. ✅ 전역 복원력 (원형으로 수렴)
-                // 전체 평균으로 당기는 힘
-                if (config != null && config.GlobalRestorationStrength > 0f)
+
+                // 좌우 평활화 (선택적, 조절 가능)
+                if (config != null && config.EnableNeighborSmoothing && config.NeighborSmoothingStrength > 0f)
                 {
-                    float restorationForce = (averageRadius - newRadius) * config.GlobalRestorationStrength;
+                    // 주변 값의 평균으로 수렴하려는 성질
+                    // 가중치: 현재 + 이웃 (HTML 기본: 90% + 5% + 5%)
+                    // ✅ 맥동에 따라 복원력 조절
+                    // ✅ 상처 배율 적용
+                    float recoveryScale = config.EnableWoundSystem ? _recoveryScales[i] : 1f;
+                    float neighborWeight = config.NeighborSmoothingStrength * smoothingMultiplier * recoveryScale; // 맥동 + 상처 연동
+                    
+                    // 가중치 정규화 (합이 1.0 유지)
+                    float totalWeight = 1f + neighborWeight * 2f;
+                    float baseWeight = 1f / totalWeight;
+                    neighborWeight /= totalWeight;
+                    
+                    newRadius = newRadius * baseWeight + (_sectorRadii[prev] + _sectorRadii[next]) * neighborWeight;
+                }
+                
+                // 3. ✅ 전역 복원력 (원형으로 수렴) - 선택적
+                // 전체 평균으로 당기는 힘 (ON/OFF 가능)
+                // ✅ 상처 배율 적용
+                if (config != null && config.EnableGlobalRestoration && config.GlobalRestorationStrength > 0f)
+                {
+                    float recoveryScale = config.EnableWoundSystem ? _recoveryScales[i] : 1f;
+                    float restorationForce = (averageRadius - newRadius) * config.GlobalRestorationStrength * recoveryScale;
                     newRadius += restorationForce;
                 }
 
@@ -302,9 +326,9 @@ namespace ShapeDefense.Scripts.Polar
             _sectorRadii[index] += amount;
             _sectorRadii[index] = Mathf.Max(_sectorRadii[index], EarthRadius);
         }
-        
+
         /// <summary>
-        /// 특정 섹터의 반지름 증가 + 가우스 평활화 (Step 3: Smooth Push)
+        /// 특정 섹터의 반지름 증가 + 가우스 평smooth화 (Step 3: Smooth Push)
         /// </summary>
         public void PushSectorRadiusSmooth(int centerIndex, float amount)
         {
@@ -374,6 +398,107 @@ namespace ShapeDefense.Scripts.Polar
             if (enableDebugLogs)
             {
                 Debug.Log("[PolarFieldController] Game Reset!");
+            }
+        }
+        
+        #endregion
+        
+        #region Wound System
+
+        /// <summary>
+        /// 특정 섹터에 상처를 입힘 (Step 3: Wound System)
+        /// </summary>
+        /// <param name="sectorIndex">타격받은 섹터 인덱스</param>
+        /// <param name="impactIntensity">충격 강도 (0~1, 1=최대)</param>
+        public void ApplyWound(int sectorIndex, float impactIntensity)
+        {
+            if (sectorIndex < 0 || sectorIndex >= _sectorRadii.Length) return;
+            if (!config.EnableWoundSystem) return;
+            
+            impactIntensity = Mathf.Clamp01(impactIntensity);
+            
+            // 중앙 섹터: 최대 충격
+            ApplyWoundToSector(sectorIndex, impactIntensity);
+            
+            // 주변 섹터: 거리에 따라 감쇄 (Splash Wound)
+            int splashRadius = config.WoundSplashRadius;
+            for (int offset = 1; offset <= splashRadius; offset++)
+            {
+                // 거리에 따른 감쇄 (선형)
+                float falloff = 1f - (float)offset / (splashRadius + 1);
+                float splashIntensity = impactIntensity * falloff;
+                
+                int leftIndex = (sectorIndex - offset + _sectorRadii.Length) % _sectorRadii.Length;
+                int rightIndex = (sectorIndex + offset) % _sectorRadii.Length;
+                
+                ApplyWoundToSector(leftIndex, splashIntensity);
+                ApplyWoundToSector(rightIndex, splashIntensity);
+            }
+            
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[PolarFieldController] Wound applied at sector {sectorIndex}, intensity={impactIntensity:F2}");
+            }
+        }
+        
+        /// <summary>
+        /// 단일 섹터에 상처 적용
+        /// </summary>
+        private void ApplyWoundToSector(int index, float intensity)
+        {
+            // 회복 배율 감소 (최소값: config.WoundMinRecoveryScale)
+            float targetScale = Mathf.Lerp(1f, config.WoundMinRecoveryScale, intensity);
+            _recoveryScales[index] = Mathf.Min(_recoveryScales[index], targetScale);
+            
+            // 쿨다운 리셋 (기존 쿨다운보다 긴 경우만)
+            float newCooldown = config.WoundRecoveryDelay * intensity;
+            _woundCooldowns[index] = Mathf.Max(_woundCooldowns[index], newCooldown);
+        }
+        
+        /// <summary>
+        /// 특정 섹터의 상처 강도 조회 (0=정상, 1=심한 상처)
+        /// </summary>
+        public float GetWoundIntensity(int index)
+        {
+            if (index < 0 || index >= _sectorRadii.Length) return 0f;
+            return 1f - _recoveryScales[index];  // 0.1 (정상) → 0.9 (상처)
+        }
+        
+        /// <summary>
+        /// 특정 섹터의 회복 배율 조회 (0=완전 정지, 1=정상)
+        /// </summary>
+        public float GetRecoveryScale(int index)
+        {
+            if (index < 0 || index >= _sectorRadii.Length) return 1f;
+            return _recoveryScales[index];
+        }
+
+        /// <summary>
+        /// 상처 회복 업데이트 (매 프레임)
+        /// </summary>
+        private void UpdateWoundRecovery(float deltaTime)
+        {
+            if (!config.EnableWoundSystem) return;
+
+            for (int i = 0; i < _sectorRadii.Length; i++)
+            {
+                // 쿨다운 감소
+                if (_woundCooldowns[i] > 0f)
+                {
+                    _woundCooldowns[i] -= deltaTime;
+                }
+                else
+                {
+                    // 쿨다운 종료 후 점진적 회복 (1.0으로 수렴)
+                    if (_recoveryScales[i] < 1f)
+                    {
+                        _recoveryScales[i] = Mathf.MoveTowards(
+                            _recoveryScales[i], 
+                            1f, 
+                            config.WoundRecoverySpeed * deltaTime
+                        );
+                    }
+                }
             }
         }
 

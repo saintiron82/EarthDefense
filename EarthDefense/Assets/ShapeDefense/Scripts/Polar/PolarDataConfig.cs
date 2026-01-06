@@ -59,8 +59,35 @@ namespace ShapeDefense.Scripts.Polar
         [Tooltip("평활화 강도 (0=영향 없음, 1=완전 전파)")]
         [SerializeField, Range(0f, 1f)] private float smoothingStrength = 0.8f;
         
-        [Tooltip("전역 복원력 (0=없음, 1=즉시 복원)")]
-        [SerializeField, Range(0f, 0.1f)] private float globalRestorationStrength = 0.01f;
+        [Header("Neighbor Smoothing (좌우 평활화)")]
+        [Tooltip("좌우 평활화 활성화 (톱니 제거, 파동 전파)")]
+        [SerializeField] private bool enableNeighborSmoothing = true;
+        
+        [Tooltip("이웃 섹터 영향력 (0=없음, 0.1=강함) - HTML 기본값: 0.05")]
+        [SerializeField, Range(0f, 0.2f)] private float neighborSmoothingStrength = 0.05f;
+        
+        [Header("Global Restoration (전역 복원)")]
+        [Tooltip("전역 복원 활성화 (원형으로 수렴)")]
+        [SerializeField] private bool enableGlobalRestoration = true;
+        
+        [Tooltip("전역 복원력 (0=없음, 0.1=빠름) - 좌우 평활화를 보조하는 약한 힘")]
+        [SerializeField, Range(0f, 0.1f)] private float globalRestorationStrength = 0.005f;
+
+        [Header("Wound & Recovery Lag (상처 시스템)")]
+        [Tooltip("상처 시스템 활성화")]
+        [SerializeField] private bool enableWoundSystem = true;
+        
+        [Tooltip("상처 회복 지연 시간 (초) - 타격 후 회복 시작까지 대기")]
+        [SerializeField, Range(0f, 10f)] private float woundRecoveryDelay = 2.0f;
+        
+        [Tooltip("상처 회복 속도 (0=없음, 1=즉시) - 정상 상태로 돌아오는 속도")]
+        [SerializeField, Range(0.01f, 1f)] private float woundRecoverySpeed = 0.1f;
+        
+        [Tooltip("최소 회복 배율 (0=완전 정지, 1=정상) - 타격 시 최저치")]
+        [SerializeField, Range(0f, 1f)] private float woundMinRecoveryScale = 0.1f;
+        
+        [Tooltip("상처 확산 반경 (섹터 개수) - 주변 섹터에 영향")]
+        [SerializeField, Range(0, 20)] private int woundSplashRadius = 5;
 
         [Header("Debug")]
         [Tooltip("디버그 로그 출력 간격 (초, 0 = 비활성화)")]
@@ -87,7 +114,21 @@ namespace ShapeDefense.Scripts.Polar
         public float PushPower => pushPower;
         public int SmoothingRadius => smoothingRadius;
         public float SmoothingStrength => smoothingStrength;
+        
+        // Neighbor Smoothing 프로퍼티
+        public bool EnableNeighborSmoothing => enableNeighborSmoothing;
+        public float NeighborSmoothingStrength => neighborSmoothingStrength;
+        
+        // Global Restoration 프로퍼티
+        public bool EnableGlobalRestoration => enableGlobalRestoration;
         public float GlobalRestorationStrength => globalRestorationStrength;
+        
+        // Wound & Recovery Lag 프로퍼티
+        public bool EnableWoundSystem => enableWoundSystem;
+        public float WoundRecoveryDelay => woundRecoveryDelay;
+        public float WoundRecoverySpeed => woundRecoverySpeed;
+        public float WoundMinRecoveryScale => woundMinRecoveryScale;
+        public int WoundSplashRadius => woundSplashRadius;
 
         private void OnValidate()
         {
@@ -109,7 +150,18 @@ namespace ShapeDefense.Scripts.Polar
             pushPower = Mathf.Clamp(pushPower, 0.1f, 10f);
             smoothingRadius = Mathf.Clamp(smoothingRadius, 1, 30);
             smoothingStrength = Mathf.Clamp01(smoothingStrength);
+            
+            // Neighbor Smoothing 검증
+            neighborSmoothingStrength = Mathf.Clamp(neighborSmoothingStrength, 0f, 0.2f);
+            
+            // Global Restoration 검증
             globalRestorationStrength = Mathf.Clamp(globalRestorationStrength, 0f, 0.1f);
+            
+            // Wound & Recovery Lag 검증
+            woundRecoveryDelay = Mathf.Clamp(woundRecoveryDelay, 0f, 10f);
+            woundRecoverySpeed = Mathf.Clamp(woundRecoverySpeed, 0.01f, 1f);
+            woundMinRecoveryScale = Mathf.Clamp01(woundMinRecoveryScale);
+            woundSplashRadius = Mathf.Clamp(woundSplashRadius, 0, 20);
         }
     }
 }
