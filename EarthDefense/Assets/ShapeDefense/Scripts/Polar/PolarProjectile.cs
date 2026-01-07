@@ -1,9 +1,11 @@
 ﻿using UnityEngine;
+using ShapeDefense.Scripts.Data;  // Phase 2: WeaponData 참조
 
 namespace ShapeDefense.Scripts.Polar
 {
     /// <summary>
     /// Phase 1 - Step 4: 극좌표 투사체 (HTML bullets 배열 재현)
+    /// Phase 2 - Step 2: WeaponData 연동 및 피해 적용
     /// 극좌표 기반 이동 및 충돌 감지
     /// </summary>
     public class PolarProjectile : MonoBehaviour
@@ -35,6 +37,7 @@ namespace ShapeDefense.Scripts.Polar
         private bool _isActive;
         private PolarFieldController _fieldController;
         private PolarProjectileManager _manager;  // ✅ Manager 참조 추가
+        private WeaponData _weaponData;  // Phase 2: 무기 데이터
         
         // 프로퍼티
         public float Angle => angle;
@@ -63,12 +66,13 @@ namespace ShapeDefense.Scripts.Polar
         }
 
         /// <summary>
-        /// 투사체 초기화 및 발사
+        /// 투사체 초기화 및 발사 (Phase 2: WeaponData 추가)
         /// </summary>
-        public void Launch(PolarFieldController controller, PolarProjectileManager manager, float launchAngle, float startRadius, float projectileSpeed, float epsilon)
+        public void Launch(PolarFieldController controller, PolarProjectileManager manager, float launchAngle, float startRadius, float projectileSpeed, float epsilon, WeaponData weaponData = null)
         {
             _fieldController = controller;
             _manager = manager;
+            _weaponData = weaponData;  // Phase 2
             angle = launchAngle;
             radius = startRadius;
             speed = projectileSpeed;
@@ -199,7 +203,7 @@ namespace ShapeDefense.Scripts.Polar
         }
 
         /// <summary>
-        /// 충돌 처리
+        /// 충돌 처리 (Phase 2: 피해 적용 추가)
         /// </summary>
         private void OnCollision()
         {
@@ -211,6 +215,12 @@ namespace ShapeDefense.Scripts.Polar
 
             // 충돌 지점 섹터
             int hitSectorIndex = _fieldController.AngleToSectorIndex(angle);
+
+            // Phase 2: 무기 피해 적용
+            if (_weaponData != null)
+            {
+                ApplyWeaponDamage(hitSectorIndex);
+            }
             
             // ✅ Manager에게 충돌 알림
             if (_manager != null)
@@ -223,6 +233,110 @@ namespace ShapeDefense.Scripts.Polar
             }
             
             Deactivate();
+        }
+
+        /// <summary>
+        /// Phase 2: 무기 피해 적용
+        /// </summary>
+        private void ApplyWeaponDamage(int centerIndex)
+        {
+            if (_weaponData == null)
+            {
+                if (showDebugLogs)
+                {
+                    Debug.LogWarning("[PolarProjectile] WeaponData is null!");
+                }
+                return;
+            }
+
+            float damage = _weaponData.Damage;
+            float knockbackPower = _weaponData.KnockbackPower;
+            AreaType areaType = _weaponData.AreaType;
+
+            // 넉백 파워 설정
+            _fieldController.SetLastWeaponKnockback(knockbackPower);
+
+            // 타격 범위에 따라 피해 적용
+            switch (areaType)
+            {
+                case AreaType.Fixed:
+                    // 단일 섹터
+                    _fieldController.ApplyDamageToSector(centerIndex, damage);
+                    break;
+
+                case AreaType.Gaussian:
+                    // 가우시안 분포
+                    ApplyGaussianDamage(centerIndex, damage);
+                    break;
+
+                case AreaType.Explosion:
+                    // 폭발 범위
+                    ApplyExplosionDamage(centerIndex, damage);
+                    break;
+            }
+
+            // 상처 적용
+            if (_fieldController.Config.EnableWoundSystem)
+            {
+                _fieldController.ApplyWound(centerIndex, _weaponData.WoundIntensity);
+            }
+
+            if (showDebugLogs)
+            {
+                Debug.Log($"[PolarProjectile] Applied {areaType} damage: {damage} at sector {centerIndex}");
+            }
+        }
+
+        /// <summary>
+        /// Phase 2: 가우시안 분포 피해
+        /// </summary>
+        private void ApplyGaussianDamage(int centerIndex, float baseDamage)
+        {
+            int radius = _weaponData.DamageRadius;
+
+            // 중앙: 100% 피해
+            _fieldController.ApplyDamageToSector(centerIndex, baseDamage);
+
+            // 주변: 가우시안 감쇄
+            for (int offset = 1; offset <= radius; offset++)
+            {
+                float sigma = radius / 3f;
+                float gaussian = Mathf.Exp(-offset * offset / (2f * sigma * sigma));
+                float damage = baseDamage * gaussian;
+
+                int leftIndex = (centerIndex - offset + _fieldController.SectorCount) % _fieldController.SectorCount;
+                int rightIndex = (centerIndex + offset) % _fieldController.SectorCount;
+
+                _fieldController.ApplyDamageToSector(leftIndex, damage);
+                _fieldController.ApplyDamageToSector(rightIndex, damage);
+            }
+        }
+
+        /// <summary>
+        /// Phase 2: 폭발 범위 피해
+        /// </summary>
+        private void ApplyExplosionDamage(int centerIndex, float baseDamage)
+        {
+            int radius = _weaponData.DamageRadius;
+
+            // 중앙: 100% 피해
+            _fieldController.ApplyDamageToSector(centerIndex, baseDamage);
+
+            // 주변: 선형 또는 가우시안 감쇄
+            for (int offset = 1; offset <= radius; offset++)
+            {
+                float falloff = _weaponData.UseGaussianFalloff
+                    ? Mathf.Exp(-offset * offset / (2f * (radius / 3f) * (radius / 3f)))
+                    : 1f - (float)offset / (radius + 1);
+
+                float damage = baseDamage * falloff;
+
+                int leftIndex = (centerIndex - offset + _fieldController.SectorCount) % _fieldController.SectorCount;
+                int rightIndex = (centerIndex + offset) % _fieldController.SectorCount;
+
+                _fieldController.ApplyDamageToSector(leftIndex, damage);
+                _fieldController.ApplyDamageToSector(rightIndex, damage);
+            }
         }
 
         /// <summary>

@@ -541,17 +541,6 @@ Scene Hierarchy:
 
 ---
 
-## 다음 단계 (Phase 2)
-
-### 목표: 게임 시스템 확장
-- [ ] UI 시스템 (스코어, 스테이지, HP)
-- [ ] 파워업 시스템
-- [ ] 적 AI (침략 패턴)
-- [ ] 사운드 / VFX
-- [ ] 저장 / 불러오기
-
----
-
 ## 참고 자료
 - `Docs/ShapeDefense_CoreConcepts.md` - 핵심 개념
 - `Docs/ShapeDefense_Terminology.md` - 용어 정의

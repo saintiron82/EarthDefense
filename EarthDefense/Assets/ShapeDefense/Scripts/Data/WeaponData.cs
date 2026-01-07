@@ -1,7 +1,17 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace ShapeDefense.Scripts.Data
 {
+    /// <summary>
+    /// Phase 2: 타격 범위 타입
+    /// </summary>
+    public enum AreaType
+    {
+        Fixed,      // 고정 섹터 (1칸, 레이저)
+        Gaussian,   // 가우시안 분포 (머신건)
+        Explosion   // 물리적 반경 (미사일)
+    }
+
     /// <summary>
     /// 무기 데이터 - 무기의 모든 스펙 정의
     /// BaseWeapon은 이 데이터를 주입받아 사용
@@ -42,6 +52,25 @@ namespace ShapeDefense.Scripts.Data
         
         [Tooltip("발사체 관통 횟수")]
         [SerializeField] private int projectileMaxHits = 1;
+
+        [Header("Phase 2: Combat Properties")]
+        [Tooltip("기본 피해량 (저항력 감소량)")]
+        [SerializeField] private float damage = 10f;
+
+        [Tooltip("라인 붕괴 시 넉백 파워")]
+        [SerializeField] private float knockbackPower = 1f;
+
+        [Tooltip("타격 범위 타입")]
+        [SerializeField] private AreaType areaType = AreaType.Fixed;
+
+        [Tooltip("가우시안 적용 여부")]
+        [SerializeField] private bool useGaussianFalloff = false;
+
+        [Tooltip("타격 반경 (섹터 개수)")]
+        [SerializeField, Range(1, 30)] private int damageRadius = 1;
+
+        [Tooltip("상처 강도 (0~1)")]
+        [SerializeField, Range(0f, 1f)] private float woundIntensity = 0.5f;
         
         [Header("Level Info")]
         [Tooltip("해금 레벨 (0 = 처음부터 사용 가능)")]
@@ -69,6 +98,14 @@ namespace ShapeDefense.Scripts.Data
         public float ProjectileSpeed => projectileSpeed;
         public float ProjectileLifetime => projectileLifetime;
         public int ProjectileMaxHits => projectileMaxHits;
+
+        // Properties - Phase 2: Combat
+        public float Damage => damage;
+        public float KnockbackPower => knockbackPower;
+        public AreaType AreaType => areaType;
+        public bool UseGaussianFalloff => useGaussianFalloff;
+        public int DamageRadius => damageRadius;
+        public float WoundIntensity => woundIntensity;
         
         // Properties - Level
         public int UnlockLevel => unlockLevel;

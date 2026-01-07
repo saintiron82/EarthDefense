@@ -5,6 +5,7 @@ namespace ShapeDefense.Scripts.Polar
     /// <summary>
     /// Phase 1 - Step 1: 극좌표 필드 시뮬레이션을 위한 설정 데이터
     /// 180개 섹터의 반지름 데이터와 중력 가속도를 정의합니다.
+    /// Phase 2 - Step 1: 적(Enemy) 시스템 설정 추가 (저항력, 넉백)
     /// </summary>
     [CreateAssetMenu(fileName = "PolarDataConfig", menuName = "ShapeDefense/Polar/Config", order = 0)]
     public class PolarDataConfig : ScriptableObject
@@ -115,6 +116,26 @@ namespace ShapeDefense.Scripts.Polar
         [Tooltip("디버그 로그 출력 간격 (초, 0 = 비활성화)")]
         [SerializeField] private float debugLogInterval = 5f;
 
+        [Header("Phase 2: Enemy - Resistance System")]
+        [Tooltip("각 섹터의 기본 저항력 (HP)")]
+        [SerializeField, Range(10f, 1000f)] private float baseResistance = 100f;
+
+        [Tooltip("저항력 자동 회복 속도 (초당 %, 0 = 비활성, 0.05 = 5%/초)")]
+        [SerializeField, Range(0f, 1f)] private float resistanceRegenRate = 0f;
+
+        [Tooltip("받는 피해 배율 (1.0 = 기본)")]
+        [SerializeField, Range(0.1f, 5f)] private float resistanceDamageMultiplier = 1f;
+
+        [Header("Phase 2: Enemy - Knockback System")]
+        [Tooltip("최소 넉백 거리")]
+        [SerializeField, Range(0.01f, 1f)] private float minKnockback = 0.1f;
+
+        [Tooltip("최대 넉백 거리")]
+        [SerializeField, Range(0.5f, 5f)] private float maxKnockback = 2f;
+
+        [Tooltip("넉백 쿨다운 (초)")]
+        [SerializeField, Range(0f, 5f)] private float knockbackCooldown = 0.5f;
+
         // 공개 프로퍼티
         public int SectorCount => sectorCount;
         public float EarthRadius => earthRadius;
@@ -161,6 +182,16 @@ namespace ShapeDefense.Scripts.Polar
         public int ExplosionRadius => explosionRadius;
         public float ExplosionWoundIntensity => explosionWoundIntensity;
 
+        // Phase 2: Resistance System Properties
+        public float BaseResistance => baseResistance;
+        public float ResistanceRegenRate => resistanceRegenRate;
+        public float ResistanceDamageMultiplier => resistanceDamageMultiplier;
+
+        // Phase 2: Knockback System Properties
+        public float MinKnockback => minKnockback;
+        public float MaxKnockback => maxKnockback;
+        public float KnockbackCooldown => knockbackCooldown;
+
         private void OnValidate()
         {
             sectorCount = Mathf.Max(1, sectorCount);
@@ -201,6 +232,16 @@ namespace ShapeDefense.Scripts.Polar
             collisionEpsilon = Mathf.Clamp(collisionEpsilon, 0.01f, 0.5f);
             explosionRadius = Mathf.Clamp(explosionRadius, 1, 30);
             explosionWoundIntensity = Mathf.Clamp01(explosionWoundIntensity);
+
+            // Phase 2: Resistance System 검증
+            baseResistance = Mathf.Clamp(baseResistance, 10f, 1000f);
+            resistanceRegenRate = Mathf.Clamp(resistanceRegenRate, 0f, 1f);
+            resistanceDamageMultiplier = Mathf.Clamp(resistanceDamageMultiplier, 0.1f, 5f);
+
+            // Phase 2: Knockback System 검증
+            minKnockback = Mathf.Clamp(minKnockback, 0.01f, 1f);
+            maxKnockback = Mathf.Clamp(maxKnockback, 0.5f, 5f);
+            knockbackCooldown = Mathf.Clamp(knockbackCooldown, 0f, 5f);
         }
     }
 }

@@ -26,6 +26,13 @@ namespace ShapeDefense.Scripts.Polar
         // 180개 섹터의 반지름 데이터
         private float[] _sectorRadii;
 
+        // Phase 2: 저항력 시스템
+        private float[] _sectorResistances;  // 각 섹터의 저항력 (HP)
+
+        // Phase 2: 넉백 시스템
+        private float[] _knockbackCooldowns;  // 각 섹터의 넉백 쿨다운 (초)
+        private float _lastWeaponKnockback = 1f;  // 마지막 무기 넉백 파워 (임시 저장)
+
         // 상처 시스템 (Wound & Recovery Lag)
         private float[] _recoveryScales;    // 각 섹터의 회복 속도 배율 (0.0 ~ 1.0)
         private float[] _woundCooldowns;    // 상처 쿨다운 (초)
@@ -39,6 +46,8 @@ namespace ShapeDefense.Scripts.Polar
         public event Action OnGameOver;
         public event Action<int> OnStageChanged;
         public event Action<int, float> OnSectorReachedEarth; // (sectorIndex, radius)
+        public event Action<int> OnLineBreak;  // Phase 2: 라인 붕괴 이벤트 (sectorIndex)
+        public event Action<int, float> OnKnockbackExecuted;  // Phase 2: 넉백 실행 이벤트 (sectorIndex, distance)
 
         // 공개 프로퍼티
         public int SectorCount => config != null ? config.SectorCount : 180;
@@ -52,6 +61,7 @@ namespace ShapeDefense.Scripts.Polar
         private void Awake()
         {
             InitializeSectors();
+            OnLineBreak += HandleLineBreak;  // Phase 2: 라인 붕괴 핸들러 연결
         }
 
         private void Start()
@@ -83,6 +93,12 @@ namespace ShapeDefense.Scripts.Polar
             // 1. 상처 회복 업데이트
             UpdateWoundRecovery(deltaTime);
 
+            // 1.5. Phase 2: 저항력 회복 업데이트
+            UpdateResistanceRegeneration(deltaTime);
+
+            // 1.6. Phase 2: 넉백 쿨다운 업데이트
+            UpdateKnockbackCooldowns(deltaTime);
+
             // 2. 중력 시뮬레이션: 모든 섹터의 반지름 감소
             ApplyGravity(deltaTime);
 
@@ -105,12 +121,16 @@ namespace ShapeDefense.Scripts.Polar
             {
                 Debug.LogWarning("[PolarFieldController] Config not assigned during Awake. Using default values.");
                 _sectorRadii = new float[180];
+                _sectorResistances = new float[180];
+                _knockbackCooldowns = new float[180];
                 _recoveryScales = new float[180];
                 _woundCooldowns = new float[180];
                 
                 for (int i = 0; i < 180; i++)
                 {
                     _sectorRadii[i] = 5.0f;
+                    _sectorResistances[i] = 100f;  // Phase 2: 기본 저항력
+                    _knockbackCooldowns[i] = 0f;  // 기본 넉백 쿨다운
                     _recoveryScales[i] = 1.0f;  // 정상 상태
                     _woundCooldowns[i] = 0f;
                 }
@@ -119,6 +139,8 @@ namespace ShapeDefense.Scripts.Polar
 
             int count = config.SectorCount;
             _sectorRadii = new float[count];
+            _sectorResistances = new float[count];
+            _knockbackCooldowns = new float[count];
             _recoveryScales = new float[count];
             _woundCooldowns = new float[count];
             
@@ -127,8 +149,15 @@ namespace ShapeDefense.Scripts.Polar
             for (int i = 0; i < count; i++)
             {
                 _sectorRadii[i] = initialRadius;
+                _sectorResistances[i] = config.BaseResistance;  // Phase 2: 저항력 초기화
+                _knockbackCooldowns[i] = 0f;  // Phase 2: 넉백 쿨다운 초기화
                 _recoveryScales[i] = 1.0f;  // 정상 상태
                 _woundCooldowns[i] = 0f;
+            }
+            
+            if (enableDebugLogs && config != null)
+            {
+                Debug.Log($"[PolarFieldController] Resistances initialized: {count} sectors @ {config.BaseResistance} HP");
             }
         }
 
@@ -180,8 +209,8 @@ namespace ShapeDefense.Scripts.Polar
                 // 좌우 평활화 (선택적, 조절 가능)
                 if (config != null && config.EnableNeighborSmoothing && config.NeighborSmoothingStrength > 0f)
                 {
-                    // 주변 값의 평균으로 수렴하려는 성질
-                    // 가중치: 현재 + 이웃 (HTML 기본: 90% + 5% + 5%)
+                    // 주변 값의 평균으로 수렵하려는 성질
+                    // 가중치: current + 이웃 (HTML 기본: 90% + 5% + 5%)
                     // ✅ 맥동에 따라 복원력 조절
                     // ✅ 상처 배율 적용
                     float recoveryScale = config.EnableWoundSystem ? _recoveryScales[i] : 1f;
@@ -297,7 +326,140 @@ namespace ShapeDefense.Scripts.Polar
 
                 Debug.Log($"[PolarFieldController] Stage={currentStage}, Gravity={currentGravity:F2}, " +
                           $"Radii: Min={minRadius:F3}, Max={maxRadius:F3}, Avg={avgRadius:F3}");
+                
+                // Phase 2: 저항력 통계
+                LogResistanceStats();
             }
+        }
+
+        /// <summary>
+        /// Phase 2: 저항력 통계 로그
+        /// </summary>
+        private void LogResistanceStats()
+        {
+            if (_sectorResistances == null || config == null) return;
+
+            float minResist = float.MaxValue;
+            float maxResist = float.MinValue;
+            float sumResist = 0f;
+
+            for (int i = 0; i < _sectorResistances.Length; i++)
+            {
+                float r = _sectorResistances[i];
+                if (r < minResist) minResist = r;
+                if (r > maxResist) maxResist = r;
+                sumResist += r;
+            }
+
+            float avgResist = sumResist / _sectorResistances.Length;
+            Debug.Log($"[PolarFieldController] Resistance Stats: Min={minResist:F1}, Max={maxResist:F1}, Avg={avgResist:F1}");
+        }
+
+        /// <summary>
+        /// Phase 2: 저항력 자동 회복 (선택적, 비율 기반)
+        /// </summary>
+        private void UpdateResistanceRegeneration(float deltaTime)
+        {
+            if (config == null || config.ResistanceRegenRate <= 0f) return;
+
+            for (int i = 0; i < _sectorResistances.Length; i++)
+            {
+                if (_sectorResistances[i] < config.BaseResistance)
+                {
+                    // 비율 기반 회복: 초당 BaseResistance의 N% 회복
+                    float regenAmount = config.BaseResistance * config.ResistanceRegenRate * deltaTime;
+                    _sectorResistances[i] += regenAmount;
+                    _sectorResistances[i] = Mathf.Min(_sectorResistances[i], config.BaseResistance);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Phase 2: 넉백 쿨다운 업데이트
+        /// </summary>
+        private void UpdateKnockbackCooldowns(float deltaTime)
+        {
+            if (_knockbackCooldowns == null) return;
+
+            for (int i = 0; i < _knockbackCooldowns.Length; i++)
+            {
+                if (_knockbackCooldowns[i] > 0f)
+                {
+                    _knockbackCooldowns[i] -= deltaTime;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Phase 2: 무기의 넉백 파워 설정 (임시 저장)
+        /// </summary>
+        public void SetLastWeaponKnockback(float power)
+        {
+            _lastWeaponKnockback = power;
+        }
+
+        /// <summary>
+        /// Phase 2: 넉백 실행
+        /// </summary>
+        public void ExecuteKnockback(int index, float power)
+        {
+            if (index < 0 || index >= _sectorRadii.Length) return;
+            if (config == null) return;
+
+            // 1. 쿨다운 체크
+            if (_knockbackCooldowns != null && _knockbackCooldowns[index] > 0f)
+            {
+                if (enableDebugLogs)
+                {
+                    Debug.LogWarning($"[PolarFieldController] Sector {index} in knockback cooldown");
+                }
+                return;
+            }
+
+            // 2. 넉백 거리 계산
+            float distance = Mathf.Clamp(power, config.MinKnockback, config.MaxKnockback);
+
+            // 3. 라인 밀어내기
+            _sectorRadii[index] += distance;
+            _sectorRadii[index] = Mathf.Min(_sectorRadii[index], config.InitialRadius);
+
+            // 4. 저항력 리셋
+            if (_sectorResistances != null)
+            {
+                _sectorResistances[index] = config.BaseResistance;
+            }
+
+            // 5. 쿨다운 설정
+            if (_knockbackCooldowns != null)
+            {
+                _knockbackCooldowns[index] = config.KnockbackCooldown;
+            }
+
+            // 6. 이벤트 발동
+            OnKnockbackExecuted?.Invoke(index, distance);
+
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[PolarFieldController] Knockback executed: Sector {index}, Distance {distance:F2}");
+            }
+        }
+
+        /// <summary>
+        /// Phase 2: 넉백 쿨다운 상태 조회
+        /// </summary>
+        public bool IsInKnockbackCooldown(int index)
+        {
+            if (index < 0 || index >= _sectorRadii.Length) return false;
+            if (_knockbackCooldowns == null) return false;
+            return _knockbackCooldowns[index] > 0f;
+        }
+
+        /// <summary>
+        /// Phase 2: 라인 붕괴 핸들러
+        /// </summary>
+        private void HandleLineBreak(int index)
+        {
+            ExecuteKnockback(index, _lastWeaponKnockback);
         }
 
         #region Public API
@@ -313,6 +475,50 @@ namespace ShapeDefense.Scripts.Polar
                 return EarthRadius;
             }
             return _sectorRadii[index];
+        }
+
+        /// <summary>
+        /// Phase 2: 특정 섹터의 저항력 조회
+        /// </summary>
+        public float GetSectorResistance(int index)
+        {
+            if (index < 0 || index >= _sectorResistances.Length)
+            {
+                return 0f;
+            }
+            return _sectorResistances[index];
+        }
+
+        /// <summary>
+        /// Phase 2: 특정 섹터에 피해 적용
+        /// </summary>
+        public void ApplyDamageToSector(int index, float damage)
+        {
+            if (index < 0 || index >= _sectorResistances.Length)
+            {
+                Debug.LogWarning($"[PolarFieldController] Invalid sector index: {index}");
+                return;
+            }
+            
+            if (_isGameOver) return;
+            
+            // 피해 배율 적용
+            float actualDamage = damage * (config != null ? config.ResistanceDamageMultiplier : 1f);
+            _sectorResistances[index] -= actualDamage;
+            
+            // 음수 방지
+            _sectorResistances[index] = Mathf.Max(0f, _sectorResistances[index]);
+            
+            // 라인 붕괴 체크
+            if (_sectorResistances[index] <= 0f)
+            {
+                OnLineBreak?.Invoke(index);
+                
+                if (enableDebugLogs)
+                {
+                    Debug.Log($"[PolarFieldController] Line Break! Sector {index} resistance depleted");
+                }
+            }
         }
 
         /// <summary>
@@ -413,7 +619,7 @@ namespace ShapeDefense.Scripts.Polar
         public void ApplyWound(int sectorIndex, float impactIntensity)
         {
             if (sectorIndex < 0 || sectorIndex >= _sectorRadii.Length) return;
-            if (!config.EnableWoundSystem) return;
+            if (config == null || !config.EnableWoundSystem) return;
             
             impactIntensity = Mathf.Clamp01(impactIntensity);
             
@@ -446,6 +652,8 @@ namespace ShapeDefense.Scripts.Polar
         /// </summary>
         private void ApplyWoundToSector(int index, float intensity)
         {
+            if (config == null) return;
+
             // 회복 배율 감소 (최소값: config.WoundMinRecoveryScale)
             float targetScale = Mathf.Lerp(1f, config.WoundMinRecoveryScale, intensity);
             _recoveryScales[index] = Mathf.Min(_recoveryScales[index], targetScale);
@@ -478,7 +686,7 @@ namespace ShapeDefense.Scripts.Polar
         /// </summary>
         private void UpdateWoundRecovery(float deltaTime)
         {
-            if (!config.EnableWoundSystem) return;
+            if (config == null || !config.EnableWoundSystem) return;
 
             for (int i = 0; i < _sectorRadii.Length; i++)
             {
@@ -527,6 +735,24 @@ namespace ShapeDefense.Scripts.Polar
 
                 Vector3 point = center + new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * radius;
                 Gizmos.DrawLine(center, point);
+            }
+
+            // Phase 2: 넉백 쿨다운 시각화 (노란색 구)
+            if (Application.isPlaying && _knockbackCooldowns != null)
+            {
+                for (int i = 0; i < _knockbackCooldowns.Length; i++)
+                {
+                    if (_knockbackCooldowns[i] > 0f)
+                    {
+                        float angle = SectorIndexToAngle(i) * Mathf.Deg2Rad;
+                        float radius = _sectorRadii[i];
+                        Vector2 dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                        Vector3 pos = center + (Vector3)(dir * radius);
+
+                        Gizmos.color = Color.yellow;
+                        Gizmos.DrawWireSphere(pos, 0.1f);
+                    }
+                }
             }
         }
 
