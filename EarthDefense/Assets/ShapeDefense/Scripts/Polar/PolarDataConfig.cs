@@ -89,6 +89,28 @@ namespace ShapeDefense.Scripts.Polar
         [Tooltip("상처 확산 반경 (섹터 개수) - 주변 섹터에 영향")]
         [SerializeField, Range(0, 20)] private int woundSplashRadius = 5;
 
+        [Header("Projectile & Collision (투사체)")]
+        [Tooltip("자동 발사 활성화")]
+        [SerializeField] private bool enableAutoFire = true;
+        
+        [Tooltip("발사 간격 (초)")]
+        [SerializeField, Range(0.1f, 5f)] private float fireRate = 0.5f;
+        
+        [Tooltip("총알 속도 (Unity 단위/초)")]
+        [SerializeField, Range(1f, 50f)] private float bulletSpeed = 10f;
+        
+        [Tooltip("미사일 폭발력 (반지름 증가량)")]
+        [SerializeField, Range(0.1f, 10f)] private float missileForce = 3.0f;
+        
+        [Tooltip("충돌 감지 정밀도 (작을수록 정밀)")]
+        [SerializeField, Range(0.01f, 0.5f)] private float collisionEpsilon = 0.1f;
+        
+        [Tooltip("폭발 반경 (섹터 개수)")]
+        [SerializeField, Range(1, 30)] private int explosionRadius = 10;
+        
+        [Tooltip("폭발 시 상처 강도 (0~1)")]
+        [SerializeField, Range(0f, 1f)] private float explosionWoundIntensity = 0.8f;
+
         [Header("Debug")]
         [Tooltip("디버그 로그 출력 간격 (초, 0 = 비활성화)")]
         [SerializeField] private float debugLogInterval = 5f;
@@ -129,6 +151,15 @@ namespace ShapeDefense.Scripts.Polar
         public float WoundRecoverySpeed => woundRecoverySpeed;
         public float WoundMinRecoveryScale => woundMinRecoveryScale;
         public int WoundSplashRadius => woundSplashRadius;
+        
+        // Projectile & Collision 프로퍼티
+        public bool EnableAutoFire => enableAutoFire;
+        public float FireRate => fireRate;
+        public float BulletSpeed => bulletSpeed;
+        public float MissileForce => missileForce;
+        public float CollisionEpsilon => collisionEpsilon;
+        public int ExplosionRadius => explosionRadius;
+        public float ExplosionWoundIntensity => explosionWoundIntensity;
 
         private void OnValidate()
         {
@@ -162,6 +193,14 @@ namespace ShapeDefense.Scripts.Polar
             woundRecoverySpeed = Mathf.Clamp(woundRecoverySpeed, 0.01f, 1f);
             woundMinRecoveryScale = Mathf.Clamp01(woundMinRecoveryScale);
             woundSplashRadius = Mathf.Clamp(woundSplashRadius, 0, 20);
+            
+            // Projectile & Collision 검증
+            fireRate = Mathf.Clamp(fireRate, 0.1f, 5f);
+            bulletSpeed = Mathf.Clamp(bulletSpeed, 1f, 50f);
+            missileForce = Mathf.Clamp(missileForce, 0.1f, 10f);
+            collisionEpsilon = Mathf.Clamp(collisionEpsilon, 0.01f, 0.5f);
+            explosionRadius = Mathf.Clamp(explosionRadius, 1, 30);
+            explosionWoundIntensity = Mathf.Clamp01(explosionWoundIntensity);
         }
     }
 }

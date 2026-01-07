@@ -27,4 +27,20 @@ MonoBehaviour:
   pushPower: 2
   smoothingRadius: 8
   smoothingStrength: 0.8
+  enableNeighborSmoothing: 1
+  neighborSmoothingStrength: 0.0084
+  enableGlobalRestoration: 1
+  globalRestorationStrength: 0.0009
+  enableWoundSystem: 1
+  woundRecoveryDelay: 2
+  woundRecoverySpeed: 0.1
+  woundMinRecoveryScale: 0.1
+  woundSplashRadius: 5
+  enableAutoFire: 1
+  fireRate: 0.5
+  bulletSpeed: 10
+  missileForce: 3
+  collisionEpsilon: 0.1
+  explosionRadius: 10
+  explosionWoundIntensity: 0.8
   debugLogInterval: 5

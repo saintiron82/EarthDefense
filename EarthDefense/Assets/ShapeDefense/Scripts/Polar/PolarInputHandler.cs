@@ -22,6 +22,13 @@ namespace ShapeDefense.Scripts.Polar
         [Tooltip("Push Action Name (예: 'Player/Push')")]
         [SerializeField] private string pushActionName = "Player/Push";
 
+        [Header("Laser Visualization")]
+        [SerializeField] private LineRenderer laserBeam;
+        [SerializeField] private bool createLaserIfMissing = true;
+        [SerializeField] private Color laserColor = Color.green;
+        [SerializeField] private float laserWidth = 0.15f;
+        [SerializeField] private Material laserMaterial;
+
         [Header("Debug")]
         [SerializeField] private bool showDebugRays = true;
         [SerializeField] private bool enableDebugLogs = true;
@@ -62,6 +69,9 @@ namespace ShapeDefense.Scripts.Polar
                     Debug.Log($"[PolarInputHandler] Main Camera {(mainCamera != null ? "found" : "NOT FOUND")}");
                 }
             }
+            
+            // LineRenderer 초기화
+            InitializeLaserBeam();
             
             // New Input System 초기화
             _mouse = Mouse.current;
@@ -182,9 +192,15 @@ namespace ShapeDefense.Scripts.Polar
             }
             else
             {
-                if (_isPushing && enableDebugLogs)
+                if (_isPushing)
                 {
-                    Debug.Log($"[PolarInputHandler] Push released after {_pushFrameCount} frames");
+                    // 레이저 빔 비활성화
+                    DisableLaserBeam();
+                    
+                    if (enableDebugLogs)
+                    {
+                        Debug.Log($"[PolarInputHandler] Push released after {_pushFrameCount} frames");
+                    }
                 }
                 _isPushing = false;
                 _pushFrameCount = 0;
@@ -243,14 +259,111 @@ namespace ShapeDefense.Scripts.Polar
 
             // 평활화 적용 푸시
             controller.PushSectorRadiusSmooth(sectorIndex, pushAmount);
+            
+            // 레이저 빔 업데이트
+            UpdateLaserBeam(worldPosition, sectorIndex);
 
-            // 디버그 시각화
+            // 디버그 시각화 (기즈모)
             if (showDebugRays)
             {
                 Vector3 direction = new Vector3(localPos.x, localPos.y, 0f).normalized;
                 float currentRadius = controller.GetSectorRadius(sectorIndex);
                 Vector3 hitPoint = controller.transform.position + direction * currentRadius;
                 Debug.DrawLine(controller.transform.position, hitPoint, debugRayColor, 0.1f);
+            }
+        }
+        
+        /// <summary>
+        /// 레이저 빔 초기화
+        /// </summary>
+        private void InitializeLaserBeam()
+        {
+            if (laserBeam == null && createLaserIfMissing)
+            {
+                // LineRenderer 자동 생성
+                GameObject laserObj = new GameObject("PlayerLaserBeam");
+                laserObj.transform.SetParent(transform);
+                laserObj.transform.localPosition = Vector3.zero;
+                
+                laserBeam = laserObj.AddComponent<LineRenderer>();
+                
+                if (enableDebugLogs)
+                {
+                    Debug.Log("[PolarInputHandler] Created LineRenderer for laser beam");
+                }
+            }
+            
+            if (laserBeam != null)
+            {
+                // LineRenderer 설정
+                laserBeam.positionCount = 2;
+                laserBeam.startWidth = laserWidth;
+                laserBeam.endWidth = laserWidth * 0.5f;
+                laserBeam.numCornerVertices = 4;
+                laserBeam.numCapVertices = 4;
+                
+                // Material 설정
+                if (laserMaterial != null)
+                {
+                    laserBeam.material = laserMaterial;
+                }
+                else
+                {
+                    // 기본 Material 생성
+                    laserBeam.material = new Material(Shader.Find("Sprites/Default"));
+                }
+                
+                laserBeam.startColor = laserColor;
+                laserBeam.endColor = laserColor;
+                laserBeam.sortingOrder = 20; // 장막 + 투사체 위에
+                
+                laserBeam.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                laserBeam.receiveShadows = false;
+                
+                // 초기 비활성화
+                laserBeam.enabled = false;
+                
+                if (enableDebugLogs)
+                {
+                    Debug.Log($"[PolarInputHandler] LaserBeam configured: Color={laserColor}, Width={laserWidth}");
+                }
+            }
+        }
+        
+        /// <summary>
+        /// 레이저 빔 위치 업데이트
+        /// </summary>
+        private void UpdateLaserBeam(Vector2 mouseWorldPos, int sectorIndex)
+        {
+            if (laserBeam == null) return;
+            
+            // 레이저 활성화
+            if (!laserBeam.enabled)
+            {
+                laserBeam.enabled = true;
+            }
+            
+            // 시작점: 컨트롤러 중심 (지구)
+            Vector3 startPos = controller.transform.position;
+            
+            // 끝점: 해당 섹터의 현재 반지름
+            Vector2 direction = (mouseWorldPos - (Vector2)startPos).normalized;
+            float currentRadius = controller.GetSectorRadius(sectorIndex);
+            Vector3 endPos = startPos + new Vector3(direction.x, direction.y, 0f) * currentRadius;
+            
+            // LineRenderer 위치 설정
+            laserBeam.SetPosition(0, startPos);
+            laserBeam.SetPosition(1, endPos);
+        }
+        
+        /// <summary>
+        /// 레이저 빔 비활성화
+        /// </summary>
+        private void DisableLaserBeam()
+        {
+            if (laserBeam != null && laserBeam.enabled)
+            {
+                laserBeam.enabled = false;
             }
         }
 
