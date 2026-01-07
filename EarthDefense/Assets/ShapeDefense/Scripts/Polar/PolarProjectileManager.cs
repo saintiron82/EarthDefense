@@ -33,20 +33,8 @@ namespace ShapeDefense.Scripts.Polar
 
         private void Awake()
         {
-            if (controller == null)
-            {
-                controller = GetComponent<PolarFieldController>();
-            }
-            
-            // 컨테이너 생성
-            if (projectileContainer == null)
-            {
-                GameObject container = new GameObject("Projectiles");
-                projectileContainer = container.transform;
-                projectileContainer.SetParent(transform);
-            }
-            
-            InitializePool();
+            // Disabled: auto-fire/manager no longer used (ShapeDefense weapon system takes over)
+            enabled = false;
         }
 
         /// <summary>
@@ -173,19 +161,7 @@ namespace ShapeDefense.Scripts.Polar
 
         private void Update()
         {
-            if (controller == null || controller.IsGameOver) return;
-            if (!controller.Config.EnableAutoFire) return;
-
-            // 자동 발사
-            _fireTimer += Time.deltaTime;
-            if (_fireTimer >= controller.Config.FireRate)
-            {
-                _fireTimer = 0f;
-                FireRandomProjectile();
-            }
-            
-            // 활성 투사체 충돌 체크 및 처리
-            ProcessActiveProjectiles();
+            // Disabled: handled by player weapon system
         }
 
         /// <summary>

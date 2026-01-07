@@ -5,7 +5,7 @@ namespace ShapeDefense.Scripts.Weapons
     /// <summary>
     /// 콜라이더 없이 스윕 판정으로 동작하는 빔 발사체. 확장/리트랙 및 틱 데미지 처리.
     /// </summary>
-    public sealed class BeamProjectile : BaseProjectile
+    public class BeamProjectile : BaseProjectile
     {
         [Header("Beam Visual")]
         [SerializeField] private LineRenderer lineRenderer;
@@ -210,7 +210,8 @@ namespace ShapeDefense.Scripts.Weapons
                 if (hasSweepHit && CanHit(sweepHit))
                 {
                     float damagePerTick = Damage / Mathf.Max(0.0001f, _tickRate);
-                    ApplyHit(sweepHit, aimDir, damagePerTick, hitEffect, false);
+
+                    HandleTickHit(sweepHit, aimDir, damagePerTick);
                     if (_hitsLeft != int.MaxValue)
                     {
                         _hitsLeft = Mathf.Max(0, _hitsLeft - 1);
@@ -254,6 +255,12 @@ namespace ShapeDefense.Scripts.Weapons
             {
                 lineRenderer.enabled = false;
             }
+        }
+
+        // Hook for derived classes to change hit handling (e.g., Polar-only damage)
+        protected virtual void HandleTickHit(in HitResult hit, Vector2 aimDir, float damagePerTick)
+        {
+            ApplyHit(hit, aimDir, damagePerTick, hitEffect, false);
         }
     }
 }

@@ -2,7 +2,7 @@
 
 ## 개요
 
-Phase 1에서 구축한 극좌표 시뮬레이션 엔진을 기반으로, 정교한 전투 메커니즘을 추가합니다. 적의 최전선을 "라인(Line)"이라는 개념으로 정의하고, 저항력(Resistance) 시스템과 넉백(Knockback) 메커니즘을 통해 전략적 깊이를 부여합니다.
+Phase 1에서 구축한 극좌표 시뮬레이션 엔진을 기반으로, 정교한 전투 메커니즘을 추가합니다. 적의 최전선 "라인(Line)"이라는 개념으로 정의하고, 저항력(Resistance) 시스템과 넉백(Knockback) 메커니즘을 통해 전략적 깊이를 부여합니다.
 
 ---
 
@@ -104,6 +104,7 @@ Phase 1에서 구축한 극좌표 시뮬레이션 엔진을 기반으로, 정교
 # Step 2: Weapon System (Damage & Area Types) (예상 완료 시간: 2시간)
 
 ## 개요
+
 무기의 공격 특성을 정의하고, 저항력 시스템과 연동합니다. 타격 범위(AreaType)에 따라 다른 피해 계산 방식을 구현합니다.
 
 ---
@@ -134,39 +135,40 @@ Phase 1에서 구축한 극좌표 시뮬레이션 엔진을 기반으로, 정교
 ## Step 2-1: WeaponData Extension (예상 30분)
 
 ### Todo
-- [ ] `WeaponData.cs` 확장
-  - [ ] `AreaType` 열거형 정의 (Fixed, Gaussian, Explosion)
-  - [ ] `damage` 속성 추가
-  - [ ] `knockbackPower` 속성 추가
-  - [ ] `areaType` 속성 추가
-  - [ ] `useGaussianFalloff` 속성 추가
-  - [ ] `damageRadius` 속성 추가
-  - [ ] `woundIntensity` 속성 추가
+- [x] `WeaponData.cs` 확장
+  - [x] `AreaType` 열거형 정의 (Fixed, Gaussian, Explosion)
+  - [x] `damage` 속성 추가
+  - [x] `knockbackPower` 속성 추가
+  - [x] `areaType` 속성 추가
+  - [x] `useGaussianFalloff` 속성 추가
+  - [x] `damageRadius` 속성 추가
+  - [x] `woundIntensity` 속성 추가
 
 ### 수락 기준
-- [ ] `AreaType` 열거형 정의 완료
-- [ ] `WeaponData` 새로운 속성 추가 완료
-- [ ] Inspector에서 각 속성 조정 가능
+- [x] `AreaType` 열거형 정의 완료
+- [x] `WeaponData` 새로운 속성 추가 완료
+- [x] Inspector에서 각 속성 조정 가능
 
 ## Step 2-2: Projectile Damage Integration (예상 1시간)
 
 ### Todo
-- [ ] `PolarProjectile` 확장 (미사일용)
-  - [ ] `_weaponData` 필드 추가
-  - [ ] 충돌 로직 변경: `ApplyWeaponDamage()`
-  - [ ] `ApplyGaussianDamage()` 메서드 작성
-  - [ ] `ApplyExplosionDamage()` 메서드 작성
+- [x] `PolarProjectile` 확장 (미사일용)
+  - [x] `_weaponData` 필드 추가
+  - [x] 충돌 로직 변경: `ApplyWeaponDamage()`
+  - [x] `ApplyGaussianDamage()` 메서드 작성
+  - [x] `ApplyExplosionDamage()` 메서드 작성
 
-- [ ] `BeamProjectile` 확장 (레이저용)
-  - [ ] 틱 데미지를 저항력 감소로 변경
-  - [ ] `CalculateSectorIndexFromChunk()` 유틸리티 작성
+- [ ] `BeamProjectile` Polar 전용 확장 (레이저용)
+  - [x] 베이스 Beam은 비-Polar 전용으로 분리
+  - [ ] Polar 전용 빔(`PolarBeamProjectile`)을 무기에서 사용하도록 연결
+  - [ ] `CalculateSectorIndexFromChunk()` 유틸리티/매핑 확인
 
 ### 수락 기준
-- [ ] 투사체 충돌 시 저항력 감소
-- [ ] 저항력 0 도달 시 넉백 자동 실행
-- [ ] 레이저: 단일 섹터 타격 (AreaType.Fixed)
-- [ ] 머신건: 가우시안 분포 피해 (AreaType.Gaussian)
-- [ ] 미사일: 폭발 범위 타격 (AreaType.Explosion)
+- [x] 투사체 충돌 시 저항력 감소
+- [x] 저항력 0 도달 시 넉백 자동 실행
+- [ ] 레이저: 단일 섹터 타격 (AreaType.Fixed) — Polar 전용 빔 연결 필요
+- [x] 머신건: 가우시안 분포 피해 (AreaType.Gaussian)
+- [x] 미사일: 폭발 범위 타격 (AreaType.Explosion)
 - [ ] 각 무기별 Damage/Knockback 차이 체감
 
 ## Step 2-3: Weapon Presets Creation (예상 30분)
@@ -249,7 +251,7 @@ Assets/Resources/Weapons/Data/
   - [x] Step 1-1: Resistance Data Layer ✅
   - [x] Step 1-2: Knockback Mechanics ✅
 - [ ] **Step 2: Weapon System (Damage & Area Types)**
-  - [ ] Step 2-1: WeaponData Extension
+  - [x] Step 2-1: WeaponData Extension
   - [ ] Step 2-2: Projectile Damage Integration
   - [ ] Step 2-3: Weapon Presets Creation
 - [ ] **Step 3: Visual & Audio Feedback**
