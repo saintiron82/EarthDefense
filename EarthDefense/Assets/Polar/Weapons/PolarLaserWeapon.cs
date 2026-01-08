@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+﻿﻿using UnityEngine;
 using Script.SystemCore.Pool;
 using Script.SystemCore.Resource;
 
@@ -28,25 +28,23 @@ namespace Polar.Weapons
 
         public override void Fire()
         {
-            if (!CanFire || _field == null || LaserData == null) return;
+            if (_field == null || LaserData == null) return;
 
-            // 기존 빔 정리
-            if (_activeBeam != null)
-            {
-                _activeBeam.BeginRetract();
-                _activeBeam = null;
-            }
-
-            SpawnBeam();
-            SetCooldown(1f / LaserData.TickRate);
-        }
-
-        private void SpawnBeam()
-        {
-            // Muzzle.position 사용 (Arm 통합)
             Vector2 origin = Muzzle.position;
             Vector2 direction = Muzzle.right;
 
+            // 이미 활성 빔이 있으면 위치/방향만 갱신
+            if (_activeBeam != null && _activeBeam.IsActive)
+            {
+                _activeBeam.UpdateOriginDirection(origin, direction);
+                return;
+            }
+
+            SpawnBeam(origin, direction);
+        }
+
+        private void SpawnBeam(Vector2 origin, Vector2 direction)
+        {
             // ✅ ProjectileBundleId 사용
             if (PoolService.Instance == null || string.IsNullOrEmpty(LaserData.ProjectileBundleId))
             {

@@ -12,6 +12,8 @@ namespace Polar.Weapons
     {
         [Header("Visual")]
         [SerializeField] private LineRenderer lineRenderer;
+        [Header("Debug")]
+        [SerializeField] private bool logTickDamage = false;
 
         private PolarLaserWeaponData LaserData => _weaponData as PolarLaserWeaponData;
         
@@ -114,12 +116,34 @@ namespace Polar.Weapons
         {
             if (_isRetracting)
             {
-                _currentLength = Mathf.Max(0f, _currentLength - LaserData.RetractSpeed * deltaTime);
+                _currentLength = Mathf.MoveTowards(_currentLength, 0f, LaserData.RetractSpeed * deltaTime);
+                return;
             }
-            else
-            {
-                _currentLength = Mathf.Min(LaserData.MaxLength, _currentLength + LaserData.ExtendSpeed * deltaTime);
-            }
+
+            float targetLength = ComputeTargetLength();
+            float speed = targetLength >= _currentLength ? LaserData.ExtendSpeed : LaserData.RetractSpeed;
+            _currentLength = Mathf.MoveTowards(_currentLength, targetLength, speed * deltaTime);
+        }
+
+        private float ComputeTargetLength()
+        {
+            if (_field == null) return 0f;
+
+            Vector2 center = (_field as Component) != null 
+                ? (Vector2)((Component)_field).transform.position 
+                : Vector2.zero;
+
+            // 방향 기준 각도로 섹터 조회
+            float angleDeg = Mathf.Atan2(_direction.y, _direction.x) * Mathf.Rad2Deg;
+            if (angleDeg < 0f) angleDeg += 360f;
+            int sectorIndex = _field.AngleToSectorIndex(angleDeg);
+            float sectorRadius = _field.GetSectorRadius(sectorIndex);
+
+            // 머즐이 중심에서 떨어져 있으면 남은 길이를 계산
+            float originAlongDir = Vector2.Dot(_origin - center, _direction);
+            float availableLength = Mathf.Max(0f, sectorRadius - originAlongDir);
+
+            return Mathf.Min(LaserData.MaxLength, availableLength);
         }
 
         private void UpdateBeamVisual()
@@ -131,9 +155,20 @@ namespace Polar.Weapons
             lineRenderer.SetPosition(1, end);
         }
 
+        /// <summary>
+        /// 홀드 상태에서 머즐 이동/회전에 맞춰 기원/방향 갱신
+        /// </summary>
+        public void UpdateOriginDirection(Vector2 origin, Vector2 direction)
+        {
+            _origin = origin;
+            _direction = direction.sqrMagnitude > 0f ? direction.normalized : _direction;
+        }
+
         private void ApplyTickDamageIfNeeded()
         {
-            if (_weaponData == null || Time.time < _nextTickTime) return;
+            // 리트랙트 중에는 피해 틱을 중단해 중복 타격을 방지
+            if (_weaponData == null || _isRetracting) return;
+            if (Time.time < _nextTickTime || _currentLength <= 0f) return;
 
             Vector2 hitPoint = _origin + _direction * _currentLength;
             ApplyTickDamage(hitPoint);
@@ -153,6 +188,7 @@ namespace Polar.Weapons
             if (dir.sqrMagnitude <= Mathf.Epsilon) return;
 
             float angleDeg = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+            if (angleDeg < 0f) angleDeg += 360f; // ✅ 음수 각도 보정
             int sectorIndex = _field.AngleToSectorIndex(angleDeg);
 
             float damagePerTick = _weaponData.Damage / Mathf.Max(0.0001f, _weaponData.TickRate);
@@ -160,6 +196,11 @@ namespace Polar.Weapons
             _field.SetLastWeaponKnockback(_weaponData.KnockbackPower);
             _field.ApplyDamageToSector(sectorIndex, damagePerTick);
 
+            if (logTickDamage)
+            {
+                Debug.Log($"[PolarLaserProjectile] hit {sectorIndex} angle {angleDeg:F1} len {_currentLength:F2} dmg {damagePerTick:F2}");
+            }
+ 
             if (_field.EnableWoundSystem)
             {
                 _field.ApplyWound(sectorIndex, _weaponData.WoundIntensity);

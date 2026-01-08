@@ -31,7 +31,8 @@ namespace Polar.Weapons
         private PolarWeaponData _currentWeaponData;
         private string _currentWeaponId;
 
-        private void Awake()
+
+        public void Init()
         {
             if (polarFieldBehaviour != null)
             {
@@ -50,7 +51,6 @@ namespace Polar.Weapons
                 LoadWeapon(_currentWeaponData);
             }
         }
-
         private PolarWeaponData ResolveWeaponData(PolarWeaponData overrideData, string id)
         {
             if (overrideData != null) return overrideData;

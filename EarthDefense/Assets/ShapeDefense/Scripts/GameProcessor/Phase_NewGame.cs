@@ -1,4 +1,6 @@
-﻿using UnityEngine;
+﻿using Polar.Field;
+using Polar.Weapons;
+using UnityEngine;
 using SG;
 using ShapeDefense.Scripts;
 
@@ -24,13 +26,13 @@ namespace Script.GameProcessor
                 return EGamePhase.NewGame;
             }
         }
-        [SerializeField] private SectorManager _sectorManager;
-        [SerializeField] private WeaponController _weaponController;
+        [SerializeField] private PolarFieldController _polarFieldController;
+        [SerializeField] private PlayerWeaponManager _weaponManager;
         public override void Enter(GameProcessor context)
         {
-            _sectorManager.gameObject.SetActive(true);
-            _weaponController.gameObject.SetActive(true);
-            _weaponController.Init();
+            _polarFieldController.gameObject.SetActive(true);
+            _weaponManager.gameObject.SetActive(true);
+            _weaponManager.Init();
         }
 
         public override void Update()

@@ -1,5 +1,9 @@
 ﻿using System;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+using Polar.Weapons;
 
 namespace Polar.Field
 {
@@ -7,7 +11,7 @@ namespace Polar.Field
     /// Phase 1 - Step 1: 극좌표 필드 시뮬레이션의 핵심 컨트롤러
     /// 180개 섹터의 반지름 데이터를 관리하고 중력 시뮬레이션을 수행합니다.
     /// </summary>
-    public class PolarFieldController : MonoBehaviour
+    public class PolarFieldController : MonoBehaviour, IPolarField
     {
         [Header("Configuration")]
         [SerializeField] private PolarDataConfig config;
@@ -21,7 +25,17 @@ namespace Polar.Field
 
         [Header("Debug Visualization")]
         [SerializeField] private bool enableDebugLogs = true;
-        [SerializeField] private bool showGizmos = false;
+        [SerializeField] private bool showGizmos = true;
+        [SerializeField, Tooltip("섹터 HP(저항력) 기즈모 표기")]
+        private bool showResistanceGizmos = true;
+        [SerializeField, Tooltip("피해 적용 로그 출력(개발 중 확인용)")]
+        private bool logDamageEvents = false;
+        [SerializeField, Tooltip("최근 피해 지점만 표시")]
+        private bool showDamageGizmos = true;
+        [SerializeField, Tooltip("최근 피해 지점 유지 시간(초), 0 이하는 영구 표시")]
+        private float damageGizmoDuration = 0f;
+        [SerializeField] private Color damageGizmoColor = Color.red;
+        [SerializeField] private float damageGizmoSize = 0.12f;
 
         // 180개 섹터의 반지름 데이터
         private float[] _sectorRadii;
@@ -36,6 +50,7 @@ namespace Polar.Field
         // 상처 시스템 (Wound & Recovery Lag)
         private float[] _recoveryScales;    // 각 섹터의 회복 속도 배율 (0.0 ~ 1.0)
         private float[] _woundCooldowns;    // 상처 쿨다운 (초)
+        private float[] _lastDamageTimes;   // 최근 피해 시각 (초)
 
         // 게임 상태
         private bool _isGameOver;
@@ -53,6 +68,8 @@ namespace Polar.Field
         public int SectorCount => config != null ? config.SectorCount : 180;
         public float EarthRadius => config != null ? config.EarthRadius : 0.5f;
         public float InitialRadius => config != null ? config.InitialRadius : 5.0f; // 추가
+        public bool EnableWoundSystem => config != null && config.EnableWoundSystem;
+        public Vector3 CenterPosition => transform.position;
         public bool IsGameOver => _isGameOver;
         public int CurrentStage => currentStage;
         public float CurrentGravity => currentGravity;
@@ -125,6 +142,7 @@ namespace Polar.Field
                 _knockbackCooldowns = new float[180];
                 _recoveryScales = new float[180];
                 _woundCooldowns = new float[180];
+                _lastDamageTimes = new float[180];
                 
                 for (int i = 0; i < 180; i++)
                 {
@@ -133,6 +151,7 @@ namespace Polar.Field
                     _knockbackCooldowns[i] = 0f;  // 기본 넉백 쿨다운
                     _recoveryScales[i] = 1.0f;  // 정상 상태
                     _woundCooldowns[i] = 0f;
+                    _lastDamageTimes[i] = -999f;
                 }
                 return;
             }
@@ -143,6 +162,7 @@ namespace Polar.Field
             _knockbackCooldowns = new float[count];
             _recoveryScales = new float[count];
             _woundCooldowns = new float[count];
+            _lastDamageTimes = new float[count];
             
             float initialRadius = config.InitialRadius;
 
@@ -153,6 +173,7 @@ namespace Polar.Field
                 _knockbackCooldowns[i] = 0f;  // Phase 2: 넉백 쿨다운 초기화
                 _recoveryScales[i] = 1.0f;  // 정상 상태
                 _woundCooldowns[i] = 0f;
+                _lastDamageTimes[i] = -999f;
             }
             
             if (enableDebugLogs && config != null)
@@ -502,12 +523,20 @@ namespace Polar.Field
             
             if (_isGameOver) return;
             
+            float before = _sectorResistances[index];
+
             // 피해 배율 적용
             float actualDamage = damage * (config != null ? config.ResistanceDamageMultiplier : 1f);
             _sectorResistances[index] -= actualDamage;
             
             // 음수 방지
             _sectorResistances[index] = Mathf.Max(0f, _sectorResistances[index]);
+            _lastDamageTimes[index] = Time.time;
+
+            if (logDamageEvents)
+            {
+                Debug.Log($"[PolarFieldController] Damage sector {index} -{actualDamage:F2} (hp {before:F2} -> {_sectorResistances[index]:F2})");
+            }
             
             // 라인 붕괴 체크
             if (_sectorResistances[index] <= 0f)
@@ -716,8 +745,22 @@ namespace Polar.Field
 
         private void OnDrawGizmos()
         {
-            if (!showGizmos || _sectorRadii == null || _sectorRadii.Length == 0) return;
+            if (!showGizmos) return;
 
+            // 에디터 모드에서 아직 초기화 전이면 프리뷰용 기본값 세팅
+            if (_sectorRadii == null || _sectorRadii.Length == 0)
+            {
+                if (config == null) return;
+                int count = config.SectorCount;
+                _sectorRadii = new float[count];
+                _sectorResistances = new float[count];
+                for (int i = 0; i < count; i++)
+                {
+                    _sectorRadii[i] = config.InitialRadius;
+                    _sectorResistances[i] = config.BaseResistance;
+                }
+            }
+ 
             Vector3 center = transform.position;
 
             // Earth radius (red)
@@ -754,8 +797,67 @@ namespace Polar.Field
                     }
                 }
             }
+
+#if UNITY_EDITOR
+            if (Application.isPlaying && showResistanceGizmos && _sectorResistances != null && config != null)
+            {
+                DrawResistanceLabels(center);
+            }
+
+            if (Application.isPlaying && showDamageGizmos && _lastDamageTimes != null)
+            {
+                DrawDamageHits(center);
+            }
+#endif
         }
 
+#if UNITY_EDITOR
+        private void DrawResistanceLabels(Vector3 center)
+        {
+            float maxResist = config != null ? config.BaseResistance : 1f;
+            float now = Application.isPlaying ? Time.time : float.PositiveInfinity;
+            for (int i = 0; i < _sectorRadii.Length; i++)
+            {
+                bool hasDamage = _lastDamageTimes != null && _lastDamageTimes[i] >= 0f;
+                if (Application.isPlaying && _lastDamageTimes != null && damageGizmoDuration > 0f)
+                {
+                    hasDamage &= now - _lastDamageTimes[i] <= damageGizmoDuration;
+                }
+                if (Application.isPlaying && !hasDamage)
+                {
+                    continue; // 피해가 발생한 섹터만 표시 (영구 or 기간 내)
+                }
+
+                float angle = SectorIndexToAngle(i) * Mathf.Deg2Rad;
+                float radius = _sectorRadii[i];
+                Vector2 dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                Vector3 pos = center + (Vector3)(dir * radius);
+ 
+                float hp = _sectorResistances != null ? _sectorResistances[i] : 0f;
+                float t = maxResist > 0f ? Mathf.Clamp01(hp / maxResist) : 0f;
+                Color c = Color.Lerp(Color.red, Color.green, t);
+                Handles.color = c;
+                Handles.Label(pos, hp.ToString("F0"));
+            }
+        }
+
+        private void DrawDamageHits(Vector3 center)
+        {
+            float now = Time.time;
+            for (int i = 0; i < _lastDamageTimes.Length; i++)
+            {
+                if (_lastDamageTimes[i] < 0f) continue;
+                if (damageGizmoDuration > 0f && now - _lastDamageTimes[i] > damageGizmoDuration) continue;
+
+                float angle = SectorIndexToAngle(i) * Mathf.Deg2Rad;
+                float radius = _sectorRadii[i];
+                Vector2 dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                Vector3 pos = center + (Vector3)(dir * radius);
+                Handles.color = damageGizmoColor;
+                Handles.DrawWireDisc(pos, Vector3.forward, damageGizmoSize);
+            }
+        }
+#endif
         private void DrawCircle(Vector3 center, float radius, int segments)
         {
             float angleStep = 360f / segments;
