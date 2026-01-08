@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 763e77432b67a244dac13d100aeb115f, type: 3}
+  m_Name: PolraResureceBundle
+  m_EditorClassIdentifier: Assembly-CSharp::Script.SystemCore.Resource.ResourceBundle
+  bundleId: 
+  entries:
+  - id: Laser
+    addressableKey: 
+    type: 1
+    directAsset: {fileID: 9110546861258179167, guid: b31a802c801a5ee45b49515dcdb5d264, type: 3}
+    cacheGroup: 
+    poolPresetOverride: {fileID: 0}
+  - id: Beam
+    addressableKey: 
+    type: 1
+    directAsset: {fileID: 8516073858546338467, guid: 0c931965d0ef06344999d06179e20a53, type: 3}
+    cacheGroup: 
+    poolPresetOverride: {fileID: 0}
+  addressableLabels:
+  - 
+  defaultPoolPreset: {fileID: 11400000, guid: df1d48427e6517f48b39b249af2d6786, type: 2}

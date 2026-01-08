@@ -1,32 +1,33 @@
-using UnityEngine;
+﻿using UnityEngine;
 using Script.SystemCore.Resource;
 
 namespace Polar.Weapons
 {
     /// <summary>
-    /// 플레이어 전용 Polar 무기 관리자.
-    /// - IPolarField를 주입받아 PolarWeapon에 전달
-    /// - 무기 데이터 교체 및 발사(투사체/빔) 래퍼 제공
-    /// ShapeDefense WeaponController 스타일의 ID/리소스 로드를 일부 반영
+    /// 플레이어 전용 Polar 무기 관리자 (타입별 자동 로딩 + SGSystem 통합 + Arm 방식)
+    /// - IPolarField를 주입받아 무기에 전달
+    /// - 무기 데이터 타입에 따라 적절한 무기 클래스 자동 생성
+    /// - 무기 교체 및 발사 래퍼 제공
+    /// - SGSystem: PoolService 전용
+    /// - Arm: 조준 업데이트 지원 (선택 사항)
     /// </summary>
     public sealed class PlayerWeaponManager : MonoBehaviour
     {
         [Header("Field")]
-        [SerializeField] private MonoBehaviour polarFieldBehaviour; // IPolarField 구현체 할당
+        [SerializeField] private MonoBehaviour polarFieldBehaviour;
 
         [Header("Weapon")]
-        [SerializeField] private PolarWeapon weapon; // 인스펙터 지정 시 그대로 사용, 없으면 번들로 로드
-        [SerializeField] private Transform weaponSlot; // 비워두면 자기 Transform
+        [SerializeField] private Transform weaponSlot;
         [SerializeField] private PolarWeaponData defaultWeaponData;
         [SerializeField] private PolarWeaponDataTable dataTable;
         [SerializeField] private string defaultWeaponId;
-        [SerializeField] private bool usePool = false;
-        [SerializeField, Min(0f)] private float defaultStartRadius = 0.8f;
 
-        [Header("Beam")]
-        [SerializeField] private Transform beamOrigin;
+        [Header("Aim Settings")]
+        [Tooltip("조준 모드 (PolarAngle: 각도 직접, MouseFollow: 마우스 추적)")]
+        [SerializeField] private bool enableMouseAim = false;
 
         private IPolarField _field;
+        private PolarWeaponBase _currentWeapon;
         private PolarWeaponData _currentWeaponData;
         private string _currentWeaponId;
 
@@ -41,23 +42,12 @@ namespace Polar.Weapons
                 }
             }
 
-            if (weapon != null && _field != null)
+            if (_field != null)
             {
                 var data = ResolveWeaponData(defaultWeaponData, defaultWeaponId);
                 _currentWeaponData = data;
                 _currentWeaponId = data != null ? data.Id : defaultWeaponId;
                 LoadWeapon(_currentWeaponData);
-            }
-            else
-            {
-                // 인스펙터 weapon이 없으면 번들로 로드 시도
-                var data = ResolveWeaponData(defaultWeaponData, defaultWeaponId);
-                _currentWeaponData = data;
-                _currentWeaponId = data != null ? data.Id : defaultWeaponId;
-                if (_field != null)
-                {
-                    LoadWeapon(_currentWeaponData);
-                }
             }
         }
 
@@ -74,63 +64,124 @@ namespace Polar.Weapons
                 var data = dataTable.GetById(defaultWeaponId);
                 if (data != null) return data;
             }
-            return defaultWeaponData; // fallback
+            return defaultWeaponData;
         }
 
+        /// <summary>
+        /// 무기 로딩 (타입별 자동 생성)
+        /// </summary>
         private void LoadWeapon(PolarWeaponData data)
         {
             if (_field == null) return;
 
-            // 기존 무기 제거 (인스펙터 상주형이면 건너뜀)
-            if (weapon != null && weapon.gameObject.scene.IsValid())
+            // 기존 무기 제거
+            if (_currentWeapon != null)
             {
-                Destroy(weapon.gameObject);
-                weapon = null;
+                Destroy(_currentWeapon.gameObject);
+                _currentWeapon = null;
             }
 
-            // WeaponBundleId로 프리팹 로드
-            if (data != null && ResourceService.Instance != null && !string.IsNullOrEmpty(data.WeaponBundleId))
+            if (data == null) return;
+
+            // WeaponBundleId로 프리팹 로드 시도
+            GameObject weaponObj = null;
+            if (ResourceService.Instance != null && !string.IsNullOrEmpty(data.WeaponBundleId))
             {
                 var prefab = ResourceService.Instance.LoadPrefab(data.WeaponBundleId);
                 if (prefab != null)
                 {
                     var parent = weaponSlot != null ? weaponSlot : transform;
-                    var go = Instantiate(prefab, parent);
-                    go.transform.localPosition = Vector3.zero;
-                    go.transform.localRotation = Quaternion.identity;
-                    weapon = go.GetComponent<PolarWeapon>() ?? go.AddComponent<PolarWeapon>();
+                    weaponObj = Instantiate(prefab, parent);
+                    weaponObj.transform.localPosition = Vector3.zero;
+                    weaponObj.transform.localRotation = Quaternion.identity;
                 }
             }
 
-            // 번들 로드 실패 시 인스펙터 weapon 사용
-            if (weapon == null)
+            // 프리팹 로드 실패 시 타입별 동적 생성
+            if (weaponObj == null)
             {
-                weapon = GetComponentInChildren<PolarWeapon>();
-                if (weapon == null)
-                {
-                    Debug.LogError("[PlayerWeaponManager] Weapon not found. Assign weapon or set WeaponBundleId.");
-                    return;
-                }
+                var parent = weaponSlot != null ? weaponSlot : transform;
+                weaponObj = new GameObject($"Weapon_{data.WeaponName}");
+                weaponObj.transform.SetParent(parent);
+                weaponObj.transform.localPosition = Vector3.zero;
+                weaponObj.transform.localRotation = Quaternion.identity;
             }
 
-            weapon.Initialize(_field, data, usePool);
+            // 데이터 타입에 따라 적절한 무기 컴포넌트 추가
+            _currentWeapon = CreateWeaponByType(weaponObj, data);
+
+            if (_currentWeapon != null)
+            {
+                _currentWeapon.Initialize(_field, data);
+            }
+            else
+            {
+                Debug.LogError($"[PlayerWeaponManager] Failed to create weapon for type: {data.GetType().Name}");
+            }
         }
 
         /// <summary>
-        /// 외부에서 필드/무기/데이터를 주입해 초기화.
+        /// 데이터 타입에 따라 무기 컴포넌트 생성
         /// </summary>
-        public void Initialize(IPolarField field, PolarWeapon weaponInstance = null, PolarWeaponData weaponData = null, string weaponId = null, bool? usePoolOverride = null)
+        private PolarWeaponBase CreateWeaponByType(GameObject weaponObj, PolarWeaponData data)
+        {
+            // 기존 무기 컴포넌트 확인
+            var existing = weaponObj.GetComponent<PolarWeaponBase>();
+            if (existing != null) return existing;
+
+            // 타입별 생성
+            if (data is PolarLaserWeaponData)
+            {
+                return weaponObj.AddComponent<PolarLaserWeapon>();
+            }
+            else if (data is PolarMachinegunWeaponData)
+            {
+                return weaponObj.AddComponent<PolarMachinegunWeapon>();
+            }
+            else if (data is PolarMissileWeaponData)
+            {
+                return weaponObj.AddComponent<PolarMissileWeapon>();
+            }
+            else
+            {
+                Debug.LogWarning($"[PlayerWeaponManager] Unknown weapon data type: {data.GetType().Name}.");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 외부에서 필드/무기/데이터를 주입해 초기화
+        /// </summary>
+        public void Initialize(IPolarField field, PolarWeaponData weaponData = null, string weaponId = null)
         {
             _field = field;
-            if (weaponInstance != null) weapon = weaponInstance;
-            if (usePoolOverride.HasValue) usePool = usePoolOverride.Value;
             _currentWeaponData = ResolveWeaponData(weaponData, weaponId ?? defaultWeaponId);
             _currentWeaponId = _currentWeaponData != null ? _currentWeaponData.Id : weaponId ?? defaultWeaponId;
             LoadWeapon(_currentWeaponData);
         }
 
         /// <summary>
-        /// 무기 데이터 교체.
+        /// 조준 업데이트 (선택 사항)
+        /// - MouseFollow 모드에서 사용
+        /// </summary>
+        public void UpdateAim(Vector2 worldPosition)
+        {
+            if (_currentWeapon == null || !enableMouseAim) return;
+            _currentWeapon.UpdateAim(worldPosition);
+        }
+
+        /// <summary>
+        /// 각도로 조준 업데이트 (극좌표 전용)
+        /// - PolarAngle 모드에서 사용
+        /// </summary>
+        public void UpdateAimAngle(float angleInDegrees)
+        {
+            if (_currentWeapon == null) return;
+            _currentWeapon.UpdateAimAngle(angleInDegrees);
+        }
+
+        /// <summary>
+        /// 무기 데이터 교체
         /// </summary>
         public void SetWeaponData(PolarWeaponData data)
         {
@@ -141,7 +192,7 @@ namespace Polar.Weapons
         }
 
         /// <summary>
-        /// 무기 ID 교체(테이블 조회).
+        /// 무기 ID 교체 (테이블 조회)
         /// </summary>
         public void SetWeaponId(string id)
         {
@@ -151,7 +202,7 @@ namespace Polar.Weapons
         }
 
         /// <summary>
-        /// 다음 무기로 전환(데이터 테이블 순회).
+        /// 다음 무기로 전환 (데이터 테이블 순회)
         /// </summary>
         public void NextWeapon()
         {
@@ -160,8 +211,14 @@ namespace Polar.Weapons
             int idx = 0;
             if (!string.IsNullOrEmpty(_currentWeaponId))
             {
-                idx = list.FindIndex(w => w != null && w.Id == _currentWeaponId);
-                if (idx < 0) idx = 0;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (list[i] != null && list[i].Id == _currentWeaponId)
+                    {
+                        idx = i;
+                        break;
+                    }
+                }
             }
             int next = (idx + 1) % list.Count;
             var data = list[next];
@@ -174,23 +231,45 @@ namespace Polar.Weapons
         }
 
         /// <summary>
-        /// 투사체 발사(Polar 섹터 각도 기준).
+        /// 무기 발사
         /// </summary>
-        public void FireProjectile(float angleDeg, float? startRadius = null)
+        public void Fire()
         {
-            if (weapon == null || _field == null) return;
-            float radius = startRadius ?? defaultStartRadius;
-            weapon.FireProjectile(angleDeg, radius);
+            if (_currentWeapon == null) return;
+            _currentWeapon.Fire();
         }
 
         /// <summary>
-        /// 빔 발사(월드 방향 벡터 사용).
+        /// 특정 각도로 발사 (머신건/미사일용)
         /// </summary>
-        public void FireBeam(Vector2 direction)
+        public void Fire(float angleDeg)
         {
-            if (weapon == null || _field == null) return;
-            Vector2 origin = beamOrigin != null ? beamOrigin.position : transform.position;
-            weapon.FireBeam(origin, direction);
+            if (_currentWeapon == null) return;
+
+            // 타입별 분기
+            if (_currentWeapon is PolarMachinegunWeapon machinegun)
+            {
+                machinegun.Fire(angleDeg);
+            }
+            else if (_currentWeapon is PolarMissileWeapon missile)
+            {
+                missile.Fire(angleDeg);
+            }
+            else
+            {
+                _currentWeapon.Fire();
+            }
+        }
+
+        /// <summary>
+        /// 발사 중지 (레이저용)
+        /// </summary>
+        public void StopFire()
+        {
+            if (_currentWeapon is PolarLaserWeapon laser)
+            {
+                laser.StopFire();
+            }
         }
     }
 }

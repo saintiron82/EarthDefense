@@ -1,4 +1,4 @@
-namespace Polar.Weapons
+﻿namespace Polar.Weapons
 {
     /// <summary>
     /// Polar 전투 시스템이 제공해야 하는 최소 인터페이스.
@@ -7,10 +7,14 @@ namespace Polar.Weapons
     public interface IPolarField
     {
         int SectorCount { get; }
+        float InitialRadius { get; }
+        UnityEngine.Vector3 CenterPosition { get; }
+        bool EnableWoundSystem { get; }
+        
         int AngleToSectorIndex(float angleDeg);
+        float GetSectorRadius(int sectorIndex);
         void ApplyDamageToSector(int sectorIndex, float damage);
         void SetLastWeaponKnockback(float power);
-        bool EnableWoundSystem { get; }
         void ApplyWound(int sectorIndex, float intensity);
     }
 }
