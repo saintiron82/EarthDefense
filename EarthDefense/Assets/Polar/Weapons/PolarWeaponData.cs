@@ -31,6 +31,7 @@ namespace Polar.Weapons
         [SerializeField] private string projectileBundleId;
 
         [Header("Combat")]
+        [Tooltip("초당 총 데미지 (DPS). TickRate로 나눠서 틱당 데미지 계산")]
         [SerializeField] private float damage = 5f;
         [SerializeField] private float knockbackPower = 0.2f;
         [SerializeField] private PolarAreaType areaType = PolarAreaType.Fixed;
@@ -39,6 +40,7 @@ namespace Polar.Weapons
         [SerializeField, Range(0f, 1f)] private float woundIntensity = 0.2f;
 
         [Header("Beam (optional)")]
+        [Tooltip("초당 타격 횟수 (예: 10 = 0.1초마다 1회)")]
         [SerializeField, Min(0.1f)] private float tickRate = 10f;
 
         public string Id => id;

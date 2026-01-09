@@ -3,22 +3,35 @@
 namespace Polar.Field
 {
     /// <summary>
-    /// Phase 1 - Step 2 (수정): 180개 섹터 데이터를 정점 1:1 매핑
-    /// HTML 프로토타입의 ctx.lineTo 로직을 Mesh.vertices로 직접 변환
-    /// 
-    /// 핵심 논리: "밖에서 안으로 조여오는 장막" (HTML destination-out 재현)
-    /// + 유기적 맥동 효과 (Organic Pulsation) - Config에서 설정 로드
+    /// Phase 1 - Step 2: 180개 섹터 데이터를 기반으로 실시간 변형되는 장막 메시 렌더링
+    /// HTML destination-out 재현: 밖에서 안으로 조여오는 장막
+    /// + 내부 경계선만 밝은 네온 글로우 (셰이더 처리)
     /// </summary>
     [RequireComponent(typeof(PolarFieldController))]
     public class PolarBoundaryRenderer : MonoBehaviour, IPolarView
     {
         [Header("Visual")]
-        [SerializeField] private Color boundaryColor = new Color(0f, 1f, 1f, 1.0f);
+        [SerializeField] private Color boundaryColor = new Color(0f, 0.8f, 0.8f, 0.3f); // 어두운 장막
         [SerializeField] private Material customMaterial;
         
+        [Header("Edge Glow (Inner Line)")]
+        [SerializeField] private Color edgeGlowColor = new Color(0f, 2f, 2f, 1f); // 밝은 시안
+        [SerializeField, Range(0f, 50f)] private float edgeGlowStrength = 20f; // maps to _EdgeIntensity
+        [SerializeField, Range(1f, 20f)] private float edgeGlowPower = 10f;     // maps to _EdgePower
+        [SerializeField, Range(0.0005f, 0.05f)] private float lineThickness = 0.01f; // UV 범위 기준 초슬림
+        
+        [Header("Pulse Effect")]
+        [SerializeField] private bool enableEdgePulse = true;
+        [SerializeField, Range(0.5f, 5f)] private float edgePulseSpeed = 2.5f;
+        [SerializeField, Range(0f, 0.5f)] private float edgePulseAmplitude = 0.3f;
+        
         [Header("Spatial Configuration")]
-        [SerializeField, Min(10f), Tooltip("화면 끝 거리 (HTML의 maxScreenDist)")]
+        [SerializeField, Min(10f), Tooltip("화면 끝 거리 (HTML maxScreenDist)")]
         private float maxViewDistance = 20f;
+        
+        [Header("Background Curtain (Optional)")]
+        [SerializeField] private bool renderCurtain = false;
+        [SerializeField] private Color curtainColor = new Color(0f, 0.5f, 0.5f, 0.1f);
         
         [Header("References")]
         [SerializeField] private PolarFieldController controller;
@@ -26,23 +39,34 @@ namespace Polar.Field
         [Header("Debug")]
         [SerializeField] private bool showDebugInfo = false;
 
-        // 단일 메시 (HTML의 Canvas 대응)
+        // 메시 렌더링
         private Mesh _mesh;
         private MeshFilter _mf;
         private MeshRenderer _mr;
         private bool _isInitialized;
-
+        
         // 정점 버퍼 (재사용)
         private Vector3[] _vertices;
         private Vector2[] _uvs;
         private int[] _triangles;
         private Color32[] _colors;
         
-        // 맥동 상태
+        // 펄스 상태
         private float _pulsationTime;
         
-        // Config 캐시 (성능)
+        // Config 캐시
         private PolarDataConfig _config;
+        
+        // MaterialPropertyBlock (성능 최적화)
+        private MaterialPropertyBlock _mpb;
+        
+        // 변경 감지용 캐시
+        private float _lastEdgeGlowStrength = -1f;
+        private float _lastLineThickness = -1f;
+        private float _lastEdgeGlowPower = -1f;
+        private Color _lastEdgeGlowColor;
+        private Color _lastBoundaryColor;
+        private bool _materialPropertiesDirty = true;
 
         public bool IsViewActive => _isInitialized;
 
@@ -55,6 +79,7 @@ namespace Polar.Field
             
             _mf = gameObject.AddComponent<MeshFilter>();
             _mr = gameObject.AddComponent<MeshRenderer>();
+            _mpb = new MaterialPropertyBlock();
         }
 
         private void Start()
@@ -73,18 +98,35 @@ namespace Polar.Field
         {
             if (!_isInitialized || controller == null) return;
 
-            // 맥동 시간 업데이트 (Config에서 활성화 여부 확인)
-            if (_config != null && _config.EnablePulsation)
+            // 펄스 시간 업데이트
+            if (enableEdgePulse || (_config != null && _config.EnablePulsation))
             {
                 _pulsationTime += Time.deltaTime;
             }
 
             UpdateFromPolarData(controller);
+            
+            // 변경 감지 후 업데이트 (값이 바뀌었을 때만)
+            UpdateMaterialPropertiesIfDirty();
         }
-
+        
         private void OnDestroy()
         {
             CleanupView();
+        }
+        
+        /// <summary>
+        /// Inspector 값 변경 시 (에디터 전용)
+        /// </summary>
+        private void OnValidate()
+        {
+            _materialPropertiesDirty = true;
+            
+            // 에디터 모드에서 즉시 반영
+            if (!Application.isPlaying && _mr != null)
+            {
+                UpdateMaterialPropertiesIfDirty();
+            }
         }
 
         #region IPolarView Implementation
@@ -92,9 +134,7 @@ namespace Polar.Field
         public void InitializeView(PolarFieldController polarController)
         {
             controller = polarController;
-            
-            // Config 캐시
-            _config = controller.Config; // PolarFieldController에서 Config 접근
+            _config = controller.Config;
             
             // 메시 초기화
             _mesh = new Mesh { name = "PolarBoundary" };
@@ -104,7 +144,7 @@ namespace Polar.Field
             // 머티리얼 설정
             SetupMaterial();
             
-            // 메시 구조 생성 (토폴로지만 1회 생성)
+            // 메시 구조 생성 (토폴로지만 1회)
             BuildMeshTopology();
             
             _isInitialized = true;
@@ -112,10 +152,7 @@ namespace Polar.Field
             if (showDebugInfo)
             {
                 Debug.Log($"[PolarBoundaryRenderer] Initialized: {_vertices.Length} vertices, {_triangles.Length / 3} triangles");
-                if (_config != null && _config.EnablePulsation)
-                {
-                    Debug.Log($"[PolarBoundaryRenderer] Pulsation: Amp={_config.PulsationAmplitude:F3}, Freq={_config.PulsationFrequency:F2}Hz");
-                }
+                Debug.Log($"[PolarBoundaryRenderer] Edge Glow: Strength={edgeGlowStrength}, Width={lineThickness}");
             }
         }
 
@@ -124,64 +161,51 @@ namespace Polar.Field
             if (polarController == null || _vertices == null) return;
 
             int sectorCount = polarController.SectorCount;
+            
+            // 엣지 펄스 계산
+            float edgePulse = 1.0f;
+            if (enableEdgePulse)
+            {
+                edgePulse = 1.0f + Mathf.Sin(_pulsationTime * edgePulseSpeed) * edgePulseAmplitude;
+            }
 
-            // HTML의 for (let i = 0; i <= SECTOR_COUNT; i++) 루프 재현
+            // HTML의 for (let i = 0; i <= SECTOR_COUNT; i++) 재현
             for (int i = 0; i <= sectorCount; i++)
             {
-                // 순환 처리 (마지막 정점 = 첫 정점)
                 int sectorIndex = i % sectorCount;
                 float angle = (i * Mathf.PI * 2f) / sectorCount;
                 
-                // ✅ 논리 반전: HTML destination-out 재현
+                // ✅ HTML destination-out 논리
                 float rInner = polarController.GetSectorRadius(sectorIndex); // 가변 (경계선)
                 float rOuter = maxViewDistance;                              // 고정 (화면 끝)
                 
-                // 🌊 맥동 효과 추가 (Config에서 설정 로드)
+                // Config 맥동 효과 적용
                 if (_config != null && _config.EnablePulsation)
                 {
                     float pulsation = CalculatePulsation(sectorIndex, sectorCount);
                     rInner += pulsation;
-                    
-                    // 외곽도 약간 맥동 (덜 강하게)
-                    rOuter += pulsation * 0.3f;
+                    rOuter += pulsation * 0.3f; // 외곽도 약간
                 }
 
-                // 정점 위치 직접 업데이트 (HTML의 ctx.lineTo)
                 float cos = Mathf.Cos(angle);
                 float sin = Mathf.Sin(angle);
                 
                 int vertexIndex = i * 2;
-                _vertices[vertexIndex] = new Vector3(cos * rInner, sin * rInner, 0f);      // Inner = 경계선 (움직임)
-                _vertices[vertexIndex + 1] = new Vector3(cos * rOuter, sin * rOuter, 0f);  // Outer = 화면 끝 (고정)
+                _vertices[vertexIndex] = new Vector3(cos * rInner, sin * rInner, 0f);      // Inner = 경계선
+                _vertices[vertexIndex + 1] = new Vector3(cos * rOuter, sin * rOuter, 0f);  // Outer = 화면 끝
+                
+                // 버텍스 컬러: Inner는 밝은 글로우, Outer는 어두움
+                byte innerGlow = (byte)(255 * edgePulse); // 최전방: 밝음
+                byte outerAlpha = 30; // 외곽: 매우 어두움
+                
+                _colors[vertexIndex] = new Color32(255, 255, 255, innerGlow);
+                _colors[vertexIndex + 1] = new Color32(255, 255, 255, outerAlpha);
             }
 
-            // 메시 업데이트 (정점만 변경, 토폴로지는 불변)
+            // 메시 업데이트
             _mesh.vertices = _vertices;
+            _mesh.colors32 = _colors;
             _mesh.RecalculateBounds();
-        }
-
-        /// <summary>
-        /// 유기적 맥동 계산 (Config에서 파라미터 로드)
-        /// </summary>
-        private float CalculatePulsation(int sectorIndex, int sectorCount)
-        {
-            if (_config == null) return 0f;
-
-            // 기본 사인파 맥동
-            float phase = (sectorIndex / (float)sectorCount) * _config.PhaseOffset * Mathf.PI * 2f;
-            float wave = Mathf.Sin(_pulsationTime * _config.PulsationFrequency * Mathf.PI * 2f + phase);
-            
-            float pulsation = wave * _config.PulsationAmplitude;
-            
-            // 노이즈 추가 (불규칙한 생명감)
-            if (_config.UsePerlinNoise)
-            {
-                float noiseInput = (_pulsationTime * 0.5f + sectorIndex * 0.1f) * _config.NoiseScale;
-                float noise = Mathf.PerlinNoise(noiseInput, sectorIndex * 0.01f) * 2f - 1f;
-                pulsation += noise * _config.PulsationAmplitude * 0.5f;
-            }
-            
-            return pulsation;
         }
 
         public void CleanupView()
@@ -200,21 +224,39 @@ namespace Polar.Field
         #endregion
 
         /// <summary>
-        /// 메시 토폴로지 생성 (1회만 실행)
-        /// HTML의 "선으로 그리기" 대신 삼각형 스트립으로 변환
+        /// 유기적 맥동 계산 (Config 파라미터)
+        /// </summary>
+        private float CalculatePulsation(int sectorIndex, int sectorCount)
+        {
+            if (_config == null) return 0f;
+
+            float phase = (sectorIndex / (float)sectorCount) * _config.PhaseOffset * Mathf.PI * 2f;
+            float wave = Mathf.Sin(_pulsationTime * _config.PulsationFrequency * Mathf.PI * 2f + phase);
+            float pulsation = wave * _config.PulsationAmplitude;
+            
+            if (_config.UsePerlinNoise)
+            {
+                float noiseInput = (_pulsationTime * 0.5f + sectorIndex * 0.1f) * _config.NoiseScale;
+                float noise = Mathf.PerlinNoise(noiseInput, sectorIndex * 0.01f) * 2f - 1f;
+                pulsation += noise * _config.PulsationAmplitude * 0.5f;
+            }
+            
+            return pulsation;
+        }
+
+        /// <summary>
+        /// 메시 토폴로지 생성 (1회만)
         /// </summary>
         private void BuildMeshTopology()
         {
             int sectorCount = controller.SectorCount;
-            
-            // 정점 개수: (sectorCount + 1) * 2 (순환을 위해 +1)
             int vertexCount = (sectorCount + 1) * 2;
+            
             _vertices = new Vector3[vertexCount];
             _uvs = new Vector2[vertexCount];
             _colors = new Color32[vertexCount];
             
-            // UV 및 색상 초기화
-            Color32 c = boundaryColor;
+            // UV: Y=0 (내부), Y=1 (외부)
             for (int i = 0; i <= sectorCount; i++)
             {
                 float t = (float)i / sectorCount;
@@ -222,15 +264,11 @@ namespace Polar.Field
                 
                 _uvs[vi] = new Vector2(t, 0f);     // Inner
                 _uvs[vi + 1] = new Vector2(t, 1f); // Outer
-                
-                _colors[vi] = c;
-                _colors[vi + 1] = c;
             }
             
-            // 삼각형 생성: 쿼드 스트립
+            // 삼각형 (쿼드 스트립)
             int quadCount = sectorCount;
-            int triangleCount = quadCount * 2 * 3;
-            _triangles = new int[triangleCount];
+            _triangles = new int[quadCount * 6];
             
             int ti = 0;
             for (int i = 0; i < quadCount; i++)
@@ -240,12 +278,10 @@ namespace Polar.Field
                 int v2 = v0 + 2;
                 int v3 = v0 + 3;
                 
-                // Triangle 1
                 _triangles[ti++] = v0;
                 _triangles[ti++] = v3;
                 _triangles[ti++] = v1;
                 
-                // Triangle 2
                 _triangles[ti++] = v0;
                 _triangles[ti++] = v2;
                 _triangles[ti++] = v3;
@@ -264,33 +300,90 @@ namespace Polar.Field
             if (customMaterial != null)
             {
                 _mr.sharedMaterial = customMaterial;
+                _materialPropertiesDirty = true;
                 return;
             }
             
             // RingSectorGlow 셰이더 사용
-            var neonShader = Shader.Find("ShapeDefense/RingSectorGlow");
-            if (neonShader != null)
+            var glowShader = Shader.Find("ShapeDefense/RingSectorGlow");
+            if (glowShader != null)
             {
-                var mat = new Material(neonShader);
-                mat.SetColor("_BaseColor", boundaryColor);
-                mat.SetColor("_EmissionColor", Color.cyan);
-                mat.SetFloat("_EmissionStrength", 1.5f);
+                var mat = new Material(glowShader);
                 
-                // 양면 렌더링
+                mat.SetColor("_BaseColor", boundaryColor);
+                mat.SetColor("_EdgeColor", edgeGlowColor);
+                mat.SetFloat("_EdgeIntensity", edgeGlowStrength);
+                mat.SetFloat("_EdgePower", edgeGlowPower);
+                mat.SetFloat("_EdgeWidth", lineThickness);
+                mat.SetFloat("_EdgeMode", 0f);
+                mat.SetFloat("_InvertLine", 0f);
+
+
+                mat.SetOverrideTag("RenderType", "Transparent");
+                mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                mat.SetInt("_ZWrite", 0);
+                mat.renderQueue = 3000;
+                
                 if (mat.HasProperty("_Cull"))
                 {
-                    mat.SetFloat("_Cull", 0f); // Cull Off
+                    mat.SetFloat("_Cull", 0f);
                 }
                 
                 _mr.sharedMaterial = mat;
+                _materialPropertiesDirty = true;
+                
+                if (showDebugInfo)
+                {
+                    Debug.Log("[PolarBoundaryRenderer] Using RingSectorGlow shader");
+                }
             }
             else
             {
-                // 폴백: 기본 Unlit
-                var mat = new Material(Shader.Find("Unlit/Color"));
+                // 폴백
+                var mat = new Material(Shader.Find("Particles/Additive"));
                 mat.color = boundaryColor;
                 _mr.sharedMaterial = mat;
+                
+                Debug.LogWarning("[PolarBoundaryRenderer] RingSectorGlow shader not found");
             }
+        }
+
+        /// <summary>
+        /// 런타임 머티리얼 프로퍼티 업데이트
+        /// </summary>
+        private void UpdateMaterialPropertiesIfDirty()
+        {
+            if (_mr == null || _mr.sharedMaterial == null) return;
+            
+            // 변경 감지
+            bool isDirty = _materialPropertiesDirty ||
+                           !Mathf.Approximately(_lastEdgeGlowStrength, edgeGlowStrength) ||
+                           !Mathf.Approximately(_lastEdgeGlowPower, edgeGlowPower) ||
+                           !Mathf.Approximately(_lastLineThickness, lineThickness) ||
+                           _lastEdgeGlowColor != edgeGlowColor ||
+                           _lastBoundaryColor != boundaryColor;
+
+            if (!isDirty) return;
+
+            _mr.GetPropertyBlock(_mpb);
+
+            _mpb.SetFloat("_EdgeIntensity", edgeGlowStrength);
+            _mpb.SetFloat("_EdgePower", edgeGlowPower);
+            _mpb.SetFloat("_EdgeWidth", lineThickness);
+            _mpb.SetFloat("_EdgeMode", 0f); // Line_Y
+            _mpb.SetFloat("_InvertLine", 0f);
+            _mpb.SetColor("_EdgeColor", edgeGlowColor);
+            _mpb.SetColor("_BaseColor", boundaryColor);
+
+            _mr.SetPropertyBlock(_mpb);
+
+            _lastEdgeGlowStrength = edgeGlowStrength;
+            _lastEdgeGlowPower = edgeGlowPower;
+            _lastLineThickness = lineThickness;
+            _lastEdgeGlowColor = edgeGlowColor;
+            _lastBoundaryColor = boundaryColor;
+            _materialPropertiesDirty = false;
         }
 
         #region Debug Visualization
@@ -302,9 +395,9 @@ namespace Polar.Field
             Vector3 center = transform.position;
             Gizmos.color = Color.yellow;
             
-            // 섹터 경계 표시
+            // 일부 섹터만 표시
             int sectorCount = controller.SectorCount;
-            for (int i = 0; i < sectorCount; i += 10) // 10개마다
+            for (int i = 0; i < sectorCount; i += 20)
             {
                 float angle = (i * Mathf.PI * 2f) / sectorCount;
                 float radius = controller.GetSectorRadius(i);

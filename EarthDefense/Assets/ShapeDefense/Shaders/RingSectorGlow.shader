@@ -2,20 +2,30 @@
 {
     Properties
     {
-        [MainColor]_BaseColor("Base Color", Color) = (1,1,1,1)
-        _EmissionColor("Emission Color", Color) = (0,1,1,1)
-        _EmissionStrength("Emission Strength", Range(0,5)) = 1
-        _RadiusOffset("Radius Offset", Float) = 0
+        [HDR]_BaseColor("Base Color (Curtain)", Color) = (0, 0.8, 0.8, 0.2)
+        [HDR]_EdgeColor("Edge Color (Neon)", Color) = (0, 5, 5, 1)
+
+        [Enum(Line_Y,0, Box_All,1)] _EdgeMode("Edge Mode", Float) = 0
+        _EdgeWidth("Edge Width (UV)", Range(0.001, 0.5)) = 0.01
+        _EdgePower("Edge Sharpness", Range(1, 20)) = 10
+        _EdgeIntensity("Emission Strength", Range(1, 50)) = 20
+        [Toggle] _InvertLine("Invert Line Position", Float) = 0
     }
 
     SubShader
     {
-        Tags { "RenderType"="Transparent" "RenderPipeline"="UniversalRenderPipeline" "Queue"="Transparent" }
+        Tags
+        {
+            "RenderType" = "Transparent"
+            "Queue" = "Transparent+100"
+            "RenderPipeline" = "UniversalRenderPipeline"
+        }
+        LOD 100
 
         Pass
         {
-            Tags { "LightMode" = "SRPDefaultUnlit" }
-
+            Name "CurtainAndEdge"
+            Tags { "LightMode" = "Universal2D" }
             Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
             Cull Off
@@ -23,63 +33,50 @@
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #pragma multi_compile_instancing
-
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
+            struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; };
+            struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };
+
             CBUFFER_START(UnityPerMaterial)
-                half4 _BaseColor;
-                half4 _EmissionColor;
-                half _EmissionStrength;
-                float _RadiusOffset;
+                float4 _BaseColor;
+                float4 _EdgeColor;
+                float _EdgeWidth;
+                float _EdgePower;
+                float _EdgeIntensity;
+                float _InvertLine;
+                float _EdgeMode;
             CBUFFER_END
 
-            struct Attributes
+            Varyings vert(Attributes input)
             {
-                float4 positionOS : POSITION;
-                half4 color : COLOR;
-            };
-
-            struct Varyings
-            {
-                float4 positionCS : SV_POSITION;
-                half4 color : COLOR;
-            };
-
-            Varyings vert(Attributes IN)
-            {
-                Varyings OUT;
-                
-                // Apply radius offset in vertex shader
-                float3 pos = IN.positionOS.xyz;
-                float radius = length(pos.xy);
-                if (radius > 0.001)
-                {
-                    float2 dir = normalize(pos.xy);
-                    pos.xy = dir * (radius + _RadiusOffset);
-                }
-                
-                OUT.positionCS = TransformObjectToHClip(pos);
-                OUT.color = IN.color;
-                return OUT;
+                Varyings o;
+                o.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                o.uv = input.uv;
+                return o;
             }
 
-            half4 frag(Varyings IN) : SV_Target
+            float4 frag(Varyings input) : SV_Target
             {
-                // Base color from vertex RGB * material base color
-                half3 baseRgb = IN.color.rgb * _BaseColor.rgb;
-                
-                // Emission mask from vertex alpha (set by RingSectorMesh per damaged cell)
-                half emissionMask = IN.color.a;
-                
-                // Add emission only where mask > 0 (damaged cells)
-                half3 emission = _EmissionColor.rgb * _EmissionStrength * emissionMask;
-                
-                // Use vertex alpha for base visibility (add floor), material alpha as multiplier
-                half alpha = saturate(emissionMask + 0.3) * _BaseColor.a;
-                
-                // Final color with combined alpha
-                return half4(baseRgb + emission, alpha);
+                float edgeFactor;
+                if (_EdgeMode < 0.5)
+                {
+                    float targetUV = (_InvertLine > 0.5) ? (1.0 - input.uv.y) : input.uv.y;
+                    edgeFactor = 1.0 - smoothstep(0.0, _EdgeWidth, targetUV);
+                }
+                else
+                {
+                    float2 distToEdge = min(input.uv, 1.0 - input.uv);
+                    float minDist = min(distToEdge.x, distToEdge.y);
+                    edgeFactor = 1.0 - smoothstep(0.0, _EdgeWidth, minDist);
+                }
+
+                float glow = pow(saturate(edgeFactor), _EdgePower);
+                float3 emission = _EdgeColor.rgb * glow * _EdgeIntensity;
+
+                // Base is premultiplied by its alpha; emission adds on top
+                float3 color = _BaseColor.rgb * _BaseColor.a + emission;
+                return float4(color, _BaseColor.a);
             }
             ENDHLSL
         }

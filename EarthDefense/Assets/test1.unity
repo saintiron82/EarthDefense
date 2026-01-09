@@ -320,6 +320,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 290315374}
+  - component: {fileID: 290315375}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -343,6 +344,25 @@ Transform:
   - {fileID: 473574033}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &290315375
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 290315373}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dc3d1ae1c38d2cd4babefec0004a1593, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Polar.Input.PolarWeaponInputHandler
+  weaponManager: {fileID: 473574034}
+  aimCamera: {fileID: 1586126456}
+  inputActions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}
+  actionMapName: Player
+  attackActionName: Attack
+  holdToFire: 1
+  enableDebugLogs: 0
 --- !u!1001 &460354528
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -355,6 +375,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: System
       objectReference: {fileID: 0}
+    - target: {fileID: 5360299100631812300, guid: 6f91a2585eca175409964bb9daa7908e, type: 3}
+      propertyPath: '_bundles.Array.data[0]'
+      value: 
+      objectReference: {fileID: 11400000, guid: b9f015abecba7ef43b7d37455c9fad47, type: 2}
     - target: {fileID: 7569199544910060393, guid: 6f91a2585eca175409964bb9daa7908e, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0.27583
@@ -481,9 +505,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cc7656b0e6c2fc143a4d9e08e0d3147f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShapeDefense.Scripts.Polar.PolarBoundaryRenderer
-  boundaryColor: {r: 0.6415094, g: 0.1764646, b: 0.03933786, a: 0.8}
+  boundaryColor: {r: 0, g: 0.8, b: 0.8, a: 0.3}
   customMaterial: {fileID: 0}
+  edgeGlowColor: {r: 0, g: 2, b: 2, a: 1}
+  edgeGlowStrength: 10
+  edgeGlowPower: 10
+  lineThickness: 0.08
+  enableEdgePulse: 1
+  edgePulseSpeed: 2.5
+  edgePulseAmplitude: 0.3
   maxViewDistance: 20
+  renderCurtain: 0
+  curtainColor: {r: 0, g: 0.5, b: 0.5, a: 0.1}
   controller: {fileID: 573076706}
   showDebugInfo: 0
 --- !u!114 &573076706
@@ -503,6 +536,12 @@ MonoBehaviour:
   currentGravity: 1
   enableDebugLogs: 1
   showGizmos: 0
+  showResistanceGizmos: 1
+  logDamageEvents: 0
+  showDamageGizmos: 1
+  damageGizmoDuration: 0
+  damageGizmoColor: {r: 1, g: 0, b: 0, a: 1}
+  damageGizmoSize: 0.12
 --- !u!4 &573076707
 Transform:
   m_ObjectHideFlags: 0
@@ -585,7 +624,7 @@ MonoBehaviour:
   m_RequiresOpaqueTextureOption: 2
   m_CameraType: 0
   m_Cameras: []
-  m_RendererIndex: -1
+  m_RendererIndex: 0
   m_VolumeLayerMask:
     serializedVersion: 2
     m_Bits: 1

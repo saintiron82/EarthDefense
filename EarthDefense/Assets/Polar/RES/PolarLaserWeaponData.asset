@@ -17,7 +17,7 @@ MonoBehaviour:
   icon: {fileID: 0}
   weaponBundleId: Laser
   projectileBundleId: Beam
-  damage: 5
+  damage: 1000
   knockbackPower: 0.2
   areaType: 0
   damageRadius: 0
@@ -27,6 +27,6 @@ MonoBehaviour:
   extendSpeed: 50
   retractSpeed: 70
   maxLength: 50
-  beamWidth: 0.1
+  beamWidth: 0.3
   beamColor: {r: 0, g: 1, b: 1, a: 1}
   duration: 2

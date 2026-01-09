@@ -46,6 +46,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Polar.Weapons.PolarLaserProjectile
   lineRenderer: {fileID: 4453000932407359804}
+  logTickDamage: 0
 --- !u!120 &4453000932407359804
 LineRenderer:
   serializedVersion: 3
@@ -72,7 +73,7 @@ LineRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 0}
+  - {fileID: 2100000, guid: a60ad2f2419e81d44a6a493739140db8, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
