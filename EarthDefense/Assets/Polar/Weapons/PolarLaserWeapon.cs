@@ -1,6 +1,7 @@
-﻿﻿using UnityEngine;
+﻿using UnityEngine;
 using Script.SystemCore.Pool;
-using Script.SystemCore.Resource;
+using Polar.Weapons.Data;
+using Polar.Weapons.Projectiles;
 
 namespace Polar.Weapons
 {
@@ -15,16 +16,6 @@ namespace Polar.Weapons
         private PolarLaserWeaponData LaserData => weaponData as PolarLaserWeaponData;
         private PolarLaserProjectile _activeBeam;
 
-        protected override void OnInitialized()
-        {
-            LoadBeamPrefab();
-        }
-
-        private void LoadBeamPrefab()
-        {
-            // ✅ ProjectileBundleId 사용 (beamBundleId 제거)
-            if (LaserData == null || string.IsNullOrEmpty(LaserData.ProjectileBundleId)) return;
-        }
 
         public override void Fire()
         {
@@ -37,9 +28,11 @@ namespace Polar.Weapons
             if (_activeBeam != null && _activeBeam.IsActive)
             {
                 _activeBeam.UpdateOriginDirection(origin, direction);
+                Debug.Log($"[PolarLaserWeapon] Fire (Update) - Origin: {origin}, Direction: {direction}, Frame: {Time.frameCount}");
                 return;
             }
 
+            Debug.Log($"[PolarLaserWeapon] Fire (NEW BEAM) - Origin: {origin}, Direction: {direction}, Frame: {Time.frameCount}, Time: {Time.time:F4}");
             SpawnBeam(origin, direction);
         }
 
@@ -66,13 +59,14 @@ namespace Polar.Weapons
         }
 
         /// <summary>
-        /// 발사 중지 (빔 리트랙트)
+        /// 발사 중지 (빔이 날아가며 소멸)
         /// </summary>
         public void StopFire()
         {
             if (_activeBeam != null)
             {
-                _activeBeam.BeginRetract();
+                Debug.Log($"[PolarLaserWeapon] StopFire - Frame: {Time.frameCount}, Time: {Time.time:F4}");
+                _activeBeam.BeginFlyAway();
                 _activeBeam = null;
             }
         }

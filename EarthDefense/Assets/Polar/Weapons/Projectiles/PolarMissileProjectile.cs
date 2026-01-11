@@ -1,12 +1,14 @@
-﻿using UnityEngine;
+﻿﻿using Polar.Weapons.Data;
+ using UnityEngine;
 
-namespace Polar.Weapons
+namespace Polar.Weapons.Projectiles
 {
     /// <summary>
     /// 미사일 투사체 (폭발 타입)
     /// - PolarMissileWeaponData와 매칭
-    /// - 독립 로직: 극좌표 이동, 충돌 감지, 폭발 범위 피해 적용
+    /// - 독립 로직: 극좌표 이동, 충돌 감지, 3단계 폭발 범위 피해 적용
     /// - SGSystem PoolService 완전 통합
+    /// - 폭발 시스템: 폭심 (Core) → 유효 범위 (Effective) → 외곽 (Outer)
     /// </summary>
     public class PolarMissileProjectile : PolarProjectileBase
     {
@@ -25,6 +27,10 @@ namespace Polar.Weapons
         private float collisionEpsilon = 0.1f;
         private PolarCombatProperties? _combatProps;
         
+        // 수명 관리
+        private float _spawnTime;
+        private float _lifetime;
+        
         public float Angle => angle;
         public float Radius => radius;
 
@@ -36,7 +42,7 @@ namespace Polar.Weapons
 
         public override void Launch(IPolarField field, PolarWeaponData weaponData)
         {
-            if (weaponData is not PolarMissileWeaponData)
+            if (weaponData is not PolarMissileWeaponData missileData)
             {
                 Debug.LogError("[PolarMissileProjectile] Requires PolarMissileWeaponData!");
                 return;
@@ -50,7 +56,14 @@ namespace Polar.Weapons
 
             angle = 0f;
             radius = 0.8f;
-            speed = MissileData.MissileSpeed;
+            speed = missileData.MissileSpeed;
+            
+            // 수명 초기화
+            _spawnTime = Time.time;
+            _lifetime = 10f; // 미사일 기본 수명 10초
+
+            Debug.Log($"[PolarMissile] Launched: Damage={_combatProps.Value.Damage}, AreaType={_combatProps.Value.AreaType}, " +
+                     $"CoreRadius={missileData.CoreRadius}, EffectiveRadius={missileData.EffectiveRadius}, MaxRadius={missileData.MaxRadius}");
 
             ActivateVisuals();
             UpdatePosition();
@@ -84,6 +97,8 @@ namespace Polar.Weapons
             radius = 0f;
             speed = 0f;
             _combatProps = null;
+            _spawnTime = 0f;
+            _lifetime = 0f;
             
             if (spriteRenderer != null) spriteRenderer.enabled = false;
             if (trailRenderer != null)
@@ -100,16 +115,23 @@ namespace Polar.Weapons
             
             if (CheckCollision())
             {
+                Debug.Log($"[PolarMissile] Collision detected at angle={angle:F1}°, radius={radius:F2}");
                 SpawnExplosionVFX();
                 OnCollision();
-                ReturnToPool();  // ✅ Deactivate() → ReturnToPool()
+                ReturnToPool();
                 return;
             }
             
             if (radius > _field.InitialRadius * 2f)
             {
-                ReturnToPool();  // ✅ 범위 이탈 시 풀 반환
+                ReturnToPool();
                 return;
+            }
+            
+            // 수명 체크 (메모리 누수 방지)
+            if (Time.time - _spawnTime > _lifetime)
+            {
+                ReturnToPool();
             }
         }
 
@@ -161,10 +183,7 @@ namespace Polar.Weapons
 
         private void OnCollision()
         {
-            if (_field == null)
-            {
-                return;
-            }
+            if (_field == null) return;
 
             int hitSectorIndex = _field.AngleToSectorIndex(angle);
 
@@ -186,13 +205,21 @@ namespace Polar.Weapons
         {
             _field.SetLastWeaponKnockback(props.KnockbackPower);
 
-            // 미사일은 주로 Explosion 타입
-            if (props.AreaType == PolarAreaType.Explosion)
+            // 미사일 전용 데이터가 있으면 3단계 폭발 시스템 사용
+            var missileData = _weaponData as PolarMissileWeaponData;
+            if (missileData != null)
             {
+                Debug.Log($"[PolarMissile] Applying 3-stage explosion damage at sector {centerIndex}, Base Damage: {props.Damage}");
+                ApplyExplosionDamage(centerIndex, props);
+            }
+            else if (props.AreaType == PolarAreaType.Explosion)
+            {
+                Debug.Log($"[PolarMissile] Applying explosion damage (fallback) at sector {centerIndex}, Damage: {props.Damage}");
                 ApplyExplosionDamage(centerIndex, props);
             }
             else
             {
+                Debug.LogWarning($"[PolarMissile] No explosion data! Applying single sector damage: {props.Damage}, AreaType: {props.AreaType}");
                 _field.ApplyDamageToSector(centerIndex, props.Damage);
             }
 
@@ -204,23 +231,105 @@ namespace Polar.Weapons
 
         private void ApplyExplosionDamage(int centerIndex, PolarCombatProperties props)
         {
-            int radius = props.DamageRadius;
-
-            _field.ApplyDamageToSector(centerIndex, props.Damage);
-
-            for (int offset = 1; offset <= radius; offset++)
+            var missileData = _weaponData as PolarMissileWeaponData;
+            if (missileData == null)
             {
-                float falloff = props.UseGaussianFalloff
-                    ? Mathf.Exp(-offset * offset / (2f * (radius / 3f) * (radius / 3f)))
-                    : 1f - (float)offset / (radius + 1);
+                // Fallback: 단순 단일 섹터 타격
+                Debug.LogWarning($"[PolarMissile] MissileData is null! Applying fallback damage: {props.Damage}");
+                _field.ApplyDamageToSector(centerIndex, props.Damage);
+                return;
+            }
 
-                float damage = props.Damage * falloff;
+            float baseDamage = props.Damage;
+            int coreRadius = missileData.CoreRadius;
+            int effectiveRadius = missileData.EffectiveRadius;
+            int maxRadius = missileData.MaxRadius;
+
+            Debug.Log($"[PolarMissile] 3-Stage Explosion: Core={coreRadius}, Effective={effectiveRadius}, Max={maxRadius}, BaseDamage={baseDamage}");
+            int totalSectorsHit = 0;
+
+            // 1. 폭심 (Core) - 풀 데미지 영역
+            for (int offset = 0; offset <= coreRadius; offset++)
+            {
+                float coreDamage = baseDamage * missileData.CoreMultiplier;
+                
+                if (offset == 0)
+                {
+                    // 중심
+                    _field.ApplyDamageToSector(centerIndex, coreDamage);
+                    totalSectorsHit++;
+                    Debug.Log($"  [Core] Center sector {centerIndex}: {coreDamage} damage");
+                }
+                else
+                {
+                    // 폭심 범위 내
+                    int leftIndex = (centerIndex - offset + _field.SectorCount) % _field.SectorCount;
+                    int rightIndex = (centerIndex + offset) % _field.SectorCount;
+                    
+                    _field.ApplyDamageToSector(leftIndex, coreDamage);
+                    _field.ApplyDamageToSector(rightIndex, coreDamage);
+                    totalSectorsHit += 2;
+                }
+            }
+
+            // 2. 유효 범위 (Effective) - 의미있는 데미지 영역
+            for (int offset = coreRadius + 1; offset <= effectiveRadius; offset++)
+            {
+                float t = (float)(offset - coreRadius) / (effectiveRadius - coreRadius);
+                float falloff = CalculateFalloff(
+                    missileData.CoreMultiplier,
+                    missileData.EffectiveMinMultiplier,
+                    t,
+                    missileData.FalloffType
+                );
+                float damage = baseDamage * falloff;
 
                 int leftIndex = (centerIndex - offset + _field.SectorCount) % _field.SectorCount;
                 int rightIndex = (centerIndex + offset) % _field.SectorCount;
 
                 _field.ApplyDamageToSector(leftIndex, damage);
                 _field.ApplyDamageToSector(rightIndex, damage);
+                totalSectorsHit += 2;
+            }
+
+            // 3. 외곽 범위 (Outer) - 감쇠 영역
+            for (int offset = effectiveRadius + 1; offset <= maxRadius; offset++)
+            {
+                float t = (float)(offset - effectiveRadius) / (maxRadius - effectiveRadius);
+                float falloff = CalculateFalloff(
+                    missileData.EffectiveMinMultiplier,
+                    missileData.MaxMinMultiplier,
+                    t,
+                    missileData.FalloffType
+                );
+                float damage = baseDamage * falloff;
+
+                int leftIndex = (centerIndex - offset + _field.SectorCount) % _field.SectorCount;
+                int rightIndex = (centerIndex + offset) % _field.SectorCount;
+
+                _field.ApplyDamageToSector(leftIndex, damage);
+                _field.ApplyDamageToSector(rightIndex, damage);
+                totalSectorsHit += 2;
+            }
+
+            Debug.Log($"[PolarMissile] Explosion complete: {totalSectorsHit} sectors hit");
+        }
+
+        private float CalculateFalloff(float start, float end, float t, ExplosionFalloffType type)
+        {
+            switch (type)
+            {
+                case ExplosionFalloffType.Linear:
+                    return Mathf.Lerp(start, end, t);
+
+                case ExplosionFalloffType.Smooth:
+                    return Mathf.Lerp(start, end, Mathf.SmoothStep(0f, 1f, t));
+
+                case ExplosionFalloffType.Exponential:
+                    return Mathf.Lerp(start, end, t * t);
+
+                default:
+                    return Mathf.Lerp(start, end, t);
             }
         }
     }

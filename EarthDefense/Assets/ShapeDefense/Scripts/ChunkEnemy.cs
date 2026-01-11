@@ -89,6 +89,8 @@ namespace ShapeDefense.Scripts
             reachRadius = reachR;
             _core = core;
 
+            Debug.Log($"[ChunkEnemy] Configured at Sector {sectorIndex}: center position = {center.position}, baseOuterRadius = {baseOuterRadius}");
+
             if (sectorMesh != null)
             {
                 sectorMesh.StartAngleDeg = thetaCenterDeg - arcDeg * 0.5f;
@@ -102,7 +104,11 @@ namespace ShapeDefense.Scripts
             }
 
             // 메시가 중심 기준으로 생성되므로, 섹터 오브젝트는 center 위치에 붙여둔다.
-            if (center != null) transform.position = center.position;
+            if (center != null)
+            {
+                transform.position = center.position;
+                Debug.Log($"[ChunkEnemy] transform.position set to {transform.position}");
+            }
         }
 
         /// <summary>
@@ -186,5 +192,28 @@ namespace ShapeDefense.Scripts
             // 섹터 스택에서 제거
             SectorManager.Instance?.UnregisterChunk(SectorIndex, this);
         }
+
+#if UNITY_EDITOR
+        private void OnDrawGizmos()
+        {
+            if (center == null) return;
+
+            // 중심 위치 (빨간 구체)
+            Gizmos.color = Color.red;
+            Gizmos.DrawWireSphere(center.position, 0.3f);
+
+            // 청크 위치 (노란 구체)
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireSphere(transform.position, 0.2f);
+
+            // 중심에서 청크까지 선
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawLine(center.position, transform.position);
+
+            // 섹터 정보 텍스트
+            UnityEditor.Handles.Label(transform.position + Vector3.up * 0.5f, 
+                $"Sector {SectorIndex}\nR: {baseOuterRadius:F2}");
+        }
+#endif
     }
 }

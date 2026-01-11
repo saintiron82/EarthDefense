@@ -337,7 +337,7 @@ Transform:
   m_GameObject: {fileID: 290315373}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.27583, y: -0.00078, z: 8.69746}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -473,7 +473,7 @@ MonoBehaviour:
   weaponSlot: {fileID: 1434197946}
   defaultWeaponData: {fileID: 0}
   dataTable: {fileID: 11400000, guid: 87fc21ad410303048a86ba8df915f388, type: 2}
-  defaultWeaponId: Laser
+  defaultWeaponId: MissileTurret
   enableMouseAim: 1
 --- !u!1 &573076704
 GameObject:
@@ -510,7 +510,7 @@ MonoBehaviour:
   edgeGlowColor: {r: 0, g: 2, b: 2, a: 1}
   edgeGlowStrength: 10
   edgeGlowPower: 10
-  lineThickness: 0.08
+  lineThickness: 0.05
   enableEdgePulse: 1
   edgePulseSpeed: 2.5
   edgePulseAmplitude: 0.3

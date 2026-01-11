@@ -1,6 +1,7 @@
 ﻿using Polar.Field;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using ShapeDefense.Scripts.Utilities;
 
 namespace ShapeDefense.Scripts.Polar
 {
@@ -30,12 +31,22 @@ namespace ShapeDefense.Scripts.Polar
         [SerializeField] private float laserWidth = 0.15f;
         [SerializeField] private Material laserMaterial;
 
+        [Header("Beam Properties")]
+        [Tooltip("레이저 빔의 넓이 (시각화 및 충돌 예측용)")]
+        [SerializeField] private float beamWidth = 0.1f;
+
+        [Header("Collision Prediction")]
+        [SerializeField] private bool enableCollisionPrediction = true;
+        [SerializeField] private LayerMask collisionLayers = -1;
+        [SerializeField] private float maxLaserRange = 100f;
+        [SerializeField] private bool predictMovingTargets = true;
+        [SerializeField] private bool showPredictionGizmos = true;
+
         [Header("Debug")]
         [SerializeField] private bool showDebugRays = true;
         [SerializeField] private bool enableDebugLogs = true;
-        [SerializeField] private Color debugRayColor = Color.green;
+        [SerializeField] private Color predictionHitColor = Color.red;
 
-        private PolarDataConfig _config;
         private bool _isPushing;
         
         // New Input System
@@ -45,6 +56,12 @@ namespace ShapeDefense.Scripts.Polar
         // Debug
         private int _pushFrameCount;
         private float _lastLogTime;
+        private float _pushStartTime; // 푸시 시작 시간
+
+        // Collision Prediction
+        private CollisionPredictor.CollisionResult? _lastPredictedHit;
+        private Vector2 _lastPredictedEndPoint;
+        private Vector2 _lastTargetWorldPos; // 실제 타격할 월드 포지션
 
         private void Awake()
         {
@@ -129,21 +146,9 @@ namespace ShapeDefense.Scripts.Polar
 
         private void Start()
         {
-            _config = controller?.Config;
-            
-            if (_config == null)
-            {
-                Debug.LogError("[PolarInputHandler] Config not found!");
-                enabled = false;
-                return;
-            }
-            
             if (enableDebugLogs)
             {
-                Debug.Log($"[PolarInputHandler] Start() - Config loaded");
-                Debug.Log($"  PushPower: {_config.PushPower}");
-                Debug.Log($"  SmoothingRadius: {_config.SmoothingRadius}");
-                Debug.Log($"  SmoothingStrength: {_config.SmoothingStrength}");
+                Debug.Log($"[PolarInputHandler] Start() - Ready for input handling");
             }
         }
 
@@ -174,21 +179,32 @@ namespace ShapeDefense.Scripts.Polar
 
             if (isInputActive)
             {
-                _pushFrameCount++;
-                
-                if (enableDebugLogs && _pushFrameCount % 30 == 0) // 30프레임마다 로그
+                if (_pushFrameCount == 0)
                 {
-                    Debug.Log($"[PolarInputHandler] Push active for {_pushFrameCount} frames");
+                    _pushStartTime = Time.time;
                 }
 
-                Vector2 worldPos = GetMouseWorldPosition();
-                
+                _pushFrameCount++;
+
+                if (enableDebugLogs && _pushFrameCount % 30 == 0) // 30프레임마다 로그
+                {
+                    float pushDuration = Time.time - _pushStartTime;
+                    Debug.Log($"[PolarInputHandler] Push active for {_pushFrameCount} frames, Duration: {pushDuration:F3}s");
+                }
+
+                Vector2 mouseWorldPos = GetMouseWorldPosition();
+
                 if (enableDebugLogs && _pushFrameCount == 1)
                 {
-                    Debug.Log($"[PolarInputHandler] First push at world position: {worldPos}");
+                    Debug.Log($"[PolarInputHandler] First push at mouse position: {mouseWorldPos}");
                 }
-                
-                CarveWall(worldPos);
+
+                // 충돌 예측을 먼저 수행하여 정확한 타격 지점 계산
+                CalculateTargetPosition(mouseWorldPos);
+
+                // 레이저 빔 시각화만 업데이트 (실제 데미지는 무기 시스템이 처리)
+                UpdateLaserBeamFromPrediction();
+
                 _isPushing = true;
             }
             else
@@ -197,14 +213,18 @@ namespace ShapeDefense.Scripts.Polar
                 {
                     // 레이저 빔 비활성화
                     DisableLaserBeam();
-                    
+
                     if (enableDebugLogs)
                     {
-                        Debug.Log($"[PolarInputHandler] Push released after {_pushFrameCount} frames");
+                        float totalDuration = Time.time - _pushStartTime;
+                        bool wasShortClick = totalDuration < 0.1f && _pushFrameCount <= 5;
+                        Debug.Log($"[PolarInputHandler] Push released after {_pushFrameCount} frames, Duration: {totalDuration:F3}s");
+                        Debug.Log($"  Classification: {(wasShortClick ? "SHORT CLICK" : "HOLD")}");
                     }
                 }
                 _isPushing = false;
                 _pushFrameCount = 0;
+                _pushStartTime = 0f;
             }
         }
 
@@ -229,51 +249,7 @@ namespace ShapeDefense.Scripts.Polar
             return new Vector2(worldPos.x, worldPos.y);
         }
 
-        /// <summary>
-        /// 특정 지점의 벽을 밀어내기 (HTML CarveWall 재현)
-        /// </summary>
-        private void CarveWall(Vector2 worldPosition)
-        {
-            // 극좌표 변환: Screen → Polar
-            Vector2 localPos = worldPosition - (Vector2)controller.transform.position;
-            
-            // 각도 계산: Atan2 (0 ~ 2π)
-            float angleRad = Mathf.Atan2(localPos.y, localPos.x);
-            float angleDeg = angleRad * Mathf.Rad2Deg;
-            if (angleDeg < 0) angleDeg += 360f;
 
-            // 섹터 인덱스 변환
-            int sectorIndex = controller.AngleToSectorIndex(angleDeg);
-
-            // 밀어내기 양 계산 (초당 pushPower)
-            float pushAmount = _config.PushPower * Time.deltaTime;
-
-            if (enableDebugLogs && _pushFrameCount == 1)
-            {
-                Debug.Log($"[PolarInputHandler] CarveWall() called:");
-                Debug.Log($"  World Pos: {worldPosition}");
-                Debug.Log($"  Local Pos: {localPos}");
-                Debug.Log($"  Angle: {angleDeg:F1}°");
-                Debug.Log($"  Sector Index: {sectorIndex}");
-                Debug.Log($"  Push Amount: {pushAmount:F4}");
-            }
-
-            // 평활화 적용 푸시
-            controller.PushSectorRadiusSmooth(sectorIndex, pushAmount);
-            
-            // 레이저 빔 업데이트
-            UpdateLaserBeam(worldPosition, sectorIndex);
-
-            // 디버그 시각화 (기즈모)
-            if (showDebugRays)
-            {
-                Vector3 direction = new Vector3(localPos.x, localPos.y, 0f).normalized;
-                float currentRadius = controller.GetSectorRadius(sectorIndex);
-                Vector3 hitPoint = controller.transform.position + direction * currentRadius;
-                Debug.DrawLine(controller.transform.position, hitPoint, debugRayColor, 0.1f);
-            }
-        }
-        
         /// <summary>
         /// 레이저 빔 초기화
         /// </summary>
@@ -330,33 +306,76 @@ namespace ShapeDefense.Scripts.Polar
                 }
             }
         }
-        
+
         /// <summary>
-        /// 레이저 빔 위치 업데이트
+        /// 마우스 위치를 기반으로 정확한 타격 지점 계산 (단일 충돌 계산)
         /// </summary>
-        private void UpdateLaserBeam(Vector2 mouseWorldPos, int sectorIndex)
+        private void CalculateTargetPosition(Vector2 mouseWorldPos)
+        {
+            Vector3 startPos = controller.transform.position;
+            Vector2 direction = (mouseWorldPos - (Vector2)startPos).normalized;
+
+            if (enableCollisionPrediction)
+            {
+                // 수학적 충돌 예측 사용 (PolarField 청크 + 외부 적들, 빔 넓이 고려)
+                var firstHit = CollisionPredictor.PredictFirstCollision(
+                    startPos,
+                    direction,
+                    beamWidth, // 빔 넓이 추가
+                    maxLaserRange,
+                    collisionLayers,
+                    predictMovingTargets
+                );
+
+                if (firstHit.HasValue)
+                {
+                    _lastTargetWorldPos = firstHit.Value.hitPoint;
+                    _lastPredictedHit = firstHit.Value;
+                    _lastPredictedEndPoint = firstHit.Value.hitPoint;
+
+                    if (enableDebugLogs && _pushFrameCount == 1)
+                    {
+                        Debug.Log($"[PolarInputHandler] Predicted collision: Type={firstHit.Value.type}, Distance={firstHit.Value.distance:F2}");
+                    }
+                }
+                else
+                {
+                    // 충돌이 없으면 마우스 방향으로 최대 범위까지
+                    _lastTargetWorldPos = mouseWorldPos;
+                    _lastPredictedHit = null;
+                    _lastPredictedEndPoint = mouseWorldPos;
+                }
+            }
+            else
+            {
+                // 예측 없이 마우스 위치 그대로 사용
+                _lastTargetWorldPos = mouseWorldPos;
+                _lastPredictedHit = null;
+                _lastPredictedEndPoint = mouseWorldPos;
+            }
+        }
+
+        /// <summary>
+        /// 이미 계산된 예측 결과로 레이저 빔 업데이트
+        /// </summary>
+        private void UpdateLaserBeamFromPrediction()
         {
             if (laserBeam == null) return;
-            
+
             // 레이저 활성화
             if (!laserBeam.enabled)
             {
                 laserBeam.enabled = true;
             }
-            
+
             // 시작점: 컨트롤러 중심 (지구)
             Vector3 startPos = controller.transform.position;
-            
-            // 끝점: 해당 섹터의 현재 반지름
-            Vector2 direction = (mouseWorldPos - (Vector2)startPos).normalized;
-            float currentRadius = controller.GetSectorRadius(sectorIndex);
-            Vector3 endPos = startPos + new Vector3(direction.x, direction.y, 0f) * currentRadius;
-            
-            // LineRenderer 위치 설정
+
+            // LineRenderer 위치 설정 (이미 계산된 endPoint 사용)
             laserBeam.SetPosition(0, startPos);
-            laserBeam.SetPosition(1, endPos);
+            laserBeam.SetPosition(1, _lastPredictedEndPoint);
         }
-        
+
         /// <summary>
         /// 레이저 빔 비활성화
         /// </summary>
@@ -401,9 +420,70 @@ namespace ShapeDefense.Scripts.Polar
             Gizmos.color = Color.yellow;
             Gizmos.DrawWireSphere(worldPos, 0.2f);
 
-            // 중심에서 마우스까지 선
+            // 실제 타격 지점 표시 (CalculateTargetPosition 결과)
+            Gizmos.color = Color.magenta;
+            Gizmos.DrawWireSphere(_lastTargetWorldPos, 0.15f);
+
+            // 중심에서 마우스까지 선 (기본 방향)
             Gizmos.color = Color.cyan;
             Gizmos.DrawLine(controller.transform.position, worldPos);
+
+            if (showPredictionGizmos && enableCollisionPrediction)
+            {
+                // 예측된 충돌 지점 표시
+                if (_lastPredictedHit.HasValue)
+                {
+                    var hit = _lastPredictedHit.Value;
+
+                    // 충돌 지점 마크
+                    Gizmos.color = predictionHitColor;
+                    Gizmos.DrawWireSphere(hit.hitPoint, 0.3f);
+
+                    // 충돌 타입에 따른 색상 변화
+                    switch (hit.type)
+                    {
+                        case CollisionPredictor.CollisionType.Enemy:
+                            Gizmos.color = Color.red;
+                            break;
+                        case CollisionPredictor.CollisionType.PolarField:
+                            Gizmos.color = Color.blue;
+                            break;
+                        case CollisionPredictor.CollisionType.Obstacle:
+                            Gizmos.color = Color.gray;
+                            break;
+                        default:
+                            Gizmos.color = predictionHitColor;
+                            break;
+                    }
+
+                    // 충돌 지점에서의 법선 벡터
+                    Gizmos.DrawRay(hit.hitPoint, hit.normal * 0.5f);
+                }
+
+                // 실제 레이저 빔 경로 (중심선)
+                Gizmos.color = Color.green;
+                Gizmos.DrawLine(controller.transform.position, _lastPredictedEndPoint);
+
+                // 빔 넓이 시각화
+                if (beamWidth > 0)
+                {
+                    Vector3 beamDirection = ((Vector3)_lastPredictedEndPoint - controller.transform.position).normalized;
+                    Vector3 perpendicular = new Vector3(-beamDirection.y, beamDirection.x, 0f);
+                    float halfWidth = beamWidth * 0.5f;
+
+                    Vector3 leftEdge = (Vector3)_lastPredictedEndPoint + perpendicular * halfWidth;
+                    Vector3 rightEdge = (Vector3)_lastPredictedEndPoint - perpendicular * halfWidth;
+                    Vector3 leftStart = controller.transform.position + perpendicular * halfWidth;
+                    Vector3 rightStart = controller.transform.position - perpendicular * halfWidth;
+
+                    Gizmos.color = Color.yellow;
+                    // 빔 가장자리 선들
+                    Gizmos.DrawLine(leftStart, leftEdge);
+                    Gizmos.DrawLine(rightStart, rightEdge);
+                    // 빔 끝부분 연결선
+                    Gizmos.DrawLine(leftEdge, rightEdge);
+                }
+            }
         }
 
         #endregion

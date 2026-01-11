@@ -14,3 +14,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Polar.Weapons.PolarWeaponDataTable
   weapons:
   - {fileID: 11400000, guid: 886d3122a7b417d4597d4a4563625510, type: 2}
+  - {fileID: 11400000, guid: c1aa252435e1a7c4fbae633e234d48fd, type: 2}
+  - {fileID: 11400000, guid: 4ab7ef48c47dbd345b86a7ce0cc429f8, type: 2}

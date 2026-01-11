@@ -130,10 +130,28 @@ namespace Script.SystemCore.Pool
 
         /// <summary>
         /// IPoolable 컴포넌트를 풀에 반환. PoolBundleId를 자동으로 사용.
+        /// 실제 런타임 타입을 자동으로 감지하여 올바른 풀에 반환.
         /// </summary>
         public void Return<T>(T component) where T : Component, IPoolable
         {
             if (component == null) return;
+            
+            // 실제 런타임 타입으로 반환 시도
+            var actualType = component.GetType();
+            var poolKey = $"{component.PoolBundleId}|{actualType.FullName}";
+            
+            if (_typedPools.TryGetValue(poolKey, out var poolObj))
+            {
+                // Reflection으로 Release 호출
+                var releaseMethod = poolObj.GetType().GetMethod("Release");
+                if (releaseMethod != null)
+                {
+                    releaseMethod.Invoke(poolObj, new object[] { component });
+                    return;
+                }
+            }
+            
+            // Fallback: 선언된 타입으로 시도
             Return(component.PoolBundleId, component);
         }
 

@@ -27,6 +27,6 @@ MonoBehaviour:
   extendSpeed: 50
   retractSpeed: 70
   maxLength: 50
-  beamWidth: 0.3
+  beamWidth: 1.58
   beamColor: {r: 0, g: 1, b: 1, a: 1}
   duration: 2

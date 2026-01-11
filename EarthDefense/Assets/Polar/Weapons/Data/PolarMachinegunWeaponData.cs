@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+﻿﻿using UnityEngine;
 
 namespace Polar.Weapons
 {
@@ -35,5 +35,54 @@ namespace Polar.Weapons
         public float ProjectileLifetime => projectileLifetime;
         public float ProjectileScale => projectileScale;
         public Color ProjectileColor => projectileColor;
+
+        public override string ToJson(bool prettyPrint = true)
+        {
+            var data = new MachinegunWeaponDataJson
+            {
+                // Base
+                baseData = base.ToJson(false),
+                // Machinegun Specific
+                fireRate = this.fireRate,
+                projectileSpeed = this.projectileSpeed,
+                spreadAngle = this.spreadAngle,
+                projectileLifetime = this.projectileLifetime,
+                projectileScale = this.projectileScale,
+                projectileColor = new[] { projectileColor.r, projectileColor.g, projectileColor.b, projectileColor.a }
+            };
+            
+            return JsonUtility.ToJson(data, prettyPrint);
+        }
+
+        public override void FromJson(string json)
+        {
+            var data = JsonUtility.FromJson<MachinegunWeaponDataJson>(json);
+            
+            // Base
+            base.FromJson(data.baseData);
+            
+            // Machinegun Specific
+            this.fireRate = data.fireRate;
+            this.projectileSpeed = data.projectileSpeed;
+            this.spreadAngle = data.spreadAngle;
+            this.projectileLifetime = data.projectileLifetime;
+            this.projectileScale = data.projectileScale;
+            if (data.projectileColor != null && data.projectileColor.Length == 4)
+            {
+                this.projectileColor = new Color(data.projectileColor[0], data.projectileColor[1], data.projectileColor[2], data.projectileColor[3]);
+            }
+        }
+
+        [System.Serializable]
+        private class MachinegunWeaponDataJson
+        {
+            public string baseData;
+            public float fireRate;
+            public float projectileSpeed;
+            public float spreadAngle;
+            public float projectileLifetime;
+            public float projectileScale;
+            public float[] projectileColor;
+        }
     }
 }

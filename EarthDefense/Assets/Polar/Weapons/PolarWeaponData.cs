@@ -7,9 +7,20 @@ namespace Polar.Weapons
     /// </summary>
     public enum PolarAreaType 
     { 
-        Fixed,      // 고정 섹터 (1칸, 레이저)
-        Gaussian,   // 가우시안 분포 (머신건)
-        Explosion   // 물리적 반경 (미사일)
+        Fixed,      // 고정 섹터 (1칸, 레이저 - 균일 데미지)
+        Linear,     // 선형 감쇠 (불릿 - 거리 비례 감소)
+        Gaussian,   // 가우시안 분포 (머신건 - 부드러운 곡선)
+        Explosion   // 물리적 반경 (미사일 - 폭발 감쇠)
+    }
+
+    /// <summary>
+    /// 폭발 감쇠 곡선 타입
+    /// </summary>
+    public enum ExplosionFalloffType
+    {
+        Linear,      // 선형 감쇠 (균일한 감소)
+        Smooth,      // 부드러운 곡선 (SmoothStep)
+        Exponential  // 지수 감쇠 (급격한 감소)
     }
 
     /// <summary>
@@ -55,6 +66,68 @@ namespace Polar.Weapons
         public bool UseGaussianFalloff => useGaussianFalloff;
         public float WoundIntensity => woundIntensity;
         public float TickRate => tickRate;
+
+        /// <summary>
+        /// JSON으로 내보내기 (직렬화)
+        /// </summary>
+        public virtual string ToJson(bool prettyPrint = true)
+        {
+            var data = new WeaponDataJson
+            {
+                id = this.id,
+                weaponName = this.weaponName,
+                weaponBundleId = this.weaponBundleId,
+                projectileBundleId = this.projectileBundleId,
+                damage = this.damage,
+                knockbackPower = this.knockbackPower,
+                areaType = this.areaType.ToString(),
+                damageRadius = this.damageRadius,
+                useGaussianFalloff = this.useGaussianFalloff,
+                woundIntensity = this.woundIntensity,
+                tickRate = this.tickRate
+            };
+            
+            return JsonUtility.ToJson(data, prettyPrint);
+        }
+
+        /// <summary>
+        /// JSON에서 데이터 가져오기 (역직렬화)
+        /// </summary>
+        public virtual void FromJson(string json)
+        {
+            var data = JsonUtility.FromJson<WeaponDataJson>(json);
+            
+            this.id = data.id;
+            this.weaponName = data.weaponName;
+            this.weaponBundleId = data.weaponBundleId;
+            this.projectileBundleId = data.projectileBundleId;
+            this.damage = data.damage;
+            this.knockbackPower = data.knockbackPower;
+            this.areaType = System.Enum.TryParse<PolarAreaType>(data.areaType, out var parsed) ? parsed : PolarAreaType.Fixed;
+            this.damageRadius = data.damageRadius;
+            this.useGaussianFalloff = data.useGaussianFalloff;
+            this.woundIntensity = data.woundIntensity;
+            this.tickRate = data.tickRate;
+        }
+
+        /// <summary>
+        /// JSON 직렬화용 데이터 클래스
+        /// </summary>
+        [System.Serializable]
+        protected class WeaponDataJson
+        {
+            public string id;
+            public string weaponName;
+            public string weaponBundleId;
+            public string projectileBundleId;
+            public float damage;
+            public float knockbackPower;
+            public string areaType;
+            public int damageRadius;
+            public bool useGaussianFalloff;
+            public float woundIntensity;
+            public float tickRate;
+        }
     }
 
     /// <summary>

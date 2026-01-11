@@ -12,6 +12,7 @@
         bool EnableWoundSystem { get; }
         
         int AngleToSectorIndex(float angleDeg);
+        float SectorIndexToAngle(int sectorIndex);
         float GetSectorRadius(int sectorIndex);
         void ApplyDamageToSector(int sectorIndex, float damage);
         void SetLastWeaponKnockback(float power);

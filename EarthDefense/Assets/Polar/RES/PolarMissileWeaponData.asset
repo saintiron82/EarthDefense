@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f81c35f6ab105394d8dbd7cc1c4ffc5d, type: 3}
+  m_Name: PolarMissileWeaponData
+  m_EditorClassIdentifier: Assembly-CSharp::Polar.Weapons.Data.PolarMissileWeaponData
+  id: MissileTurret
+  weaponName: MissileTurret
+  icon: {fileID: 0}
+  weaponBundleId: MissileTurret
+  projectileBundleId: Missile
+  damage: 500
+  knockbackPower: 0.2
+  areaType: 3
+  damageRadius: 5
+  useGaussianFalloff: 1
+  woundIntensity: 0.2
+  tickRate: 10
+  fireRate: 0.5
+  missileSpeed: 12
+  missileLifetime: 5
+  coreRadius: 1
+  effectiveRadius: 5
+  maxRadius: 8
+  coreMultiplier: 1
+  effectiveMinMultiplier: 0.8
+  maxMinMultiplier: 0.1
+  falloffType: 1
+  explosionVFXPrefab: {fileID: 0}
+  missileScale: 0.5
+  missileColor: {r: 1, g: 0, b: 0, a: 1}

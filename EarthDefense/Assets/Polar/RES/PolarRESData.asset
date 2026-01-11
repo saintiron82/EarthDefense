@@ -16,14 +16,38 @@ MonoBehaviour:
   entries:
   - id: Laser
     addressableKey: 
-    type: 0
+    type: 1
     directAsset: {fileID: 9110546861258179167, guid: b31a802c801a5ee45b49515dcdb5d264, type: 3}
     cacheGroup: 
     poolPresetOverride: {fileID: 0}
   - id: Beam
     addressableKey: 
-    type: 0
+    type: 1
     directAsset: {fileID: 8516073858546338467, guid: 0c931965d0ef06344999d06179e20a53, type: 3}
+    cacheGroup: 
+    poolPresetOverride: {fileID: 0}
+  - id: MissileTurret
+    addressableKey: 
+    type: 1
+    directAsset: {fileID: 6193378232429605586, guid: 7c48233979e482740aea2db586decec6, type: 3}
+    cacheGroup: 
+    poolPresetOverride: {fileID: 0}
+  - id: Missile
+    addressableKey: 
+    type: 1
+    directAsset: {fileID: 505152404583238259, guid: 803ec92313cf46d4b90f9f78a537db82, type: 3}
+    cacheGroup: 
+    poolPresetOverride: {fileID: 0}
+  - id: Bullet
+    addressableKey: 
+    type: 1
+    directAsset: {fileID: 366190153238983150, guid: c5dda7f202b8e1e45a31c45d916f9a64, type: 3}
+    cacheGroup: 
+    poolPresetOverride: {fileID: 0}
+  - id: Bullet
+    addressableKey: 
+    type: 1
+    directAsset: {fileID: 366190153238983150, guid: c5dda7f202b8e1e45a31c45d916f9a64, type: 3}
     cacheGroup: 
     poolPresetOverride: {fileID: 0}
   addressableLabels: []

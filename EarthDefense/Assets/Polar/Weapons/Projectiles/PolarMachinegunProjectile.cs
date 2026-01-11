@@ -1,12 +1,13 @@
-﻿using UnityEngine;
+﻿﻿using UnityEngine;
 
-namespace Polar.Weapons
+namespace Polar.Weapons.Projectiles
 {
     /// <summary>
     /// 머신건 투사체 (일반 탄환 타입)
     /// - PolarMachinegunWeaponData와 매칭
-    /// - 독립 로직: 극좌표 이동, 충돌 감지, 가우시안 피해 적용
+    /// - 독립 로직: 극좌표 이동, 충돌 감지, 단일 섹터 타격
     /// - SGSystem PoolService 완전 통합
+    /// - 빠른 연사, 정확한 단일 타격
     /// </summary>
     public class PolarMachinegunProjectile : PolarProjectileBase
     {
@@ -24,6 +25,10 @@ namespace Polar.Weapons
         private float speed;
         private float collisionEpsilon = 0.1f;
         private PolarCombatProperties? _combatProps;
+        
+        // 수명 관리
+        private float _spawnTime;
+        private float _lifetime;
         
         public float Angle => angle;
         public float Radius => radius;
@@ -52,6 +57,10 @@ namespace Polar.Weapons
             angle = 0f;
             radius = 0.8f;
             speed = MachinegunData.ProjectileSpeed;
+            
+            // 수명 초기화
+            _spawnTime = Time.time;
+            _lifetime = MachinegunData.ProjectileLifetime;
 
             ActivateVisuals();
             UpdatePosition();
@@ -86,6 +95,8 @@ namespace Polar.Weapons
             radius = 0f;
             speed = 0f;
             _combatProps = null;
+            _spawnTime = 0f;
+            _lifetime = 0f;
             
             if (spriteRenderer != null) spriteRenderer.enabled = false;
             if (trailRenderer != null)
@@ -104,14 +115,20 @@ namespace Polar.Weapons
             if (CheckCollision())
             {
                 OnCollision();
-                ReturnToPool();  // ✅ Deactivate() → ReturnToPool()
+                ReturnToPool();
                 return;
             }
             
             if (radius > _field.InitialRadius * 2f)
             {
-                ReturnToPool();  // ✅ 범위 이탈 시 풀 반환
+                ReturnToPool();
                 return;
+            }
+            
+            // 수명 체크 (메모리 누수 방지)
+            if (Time.time - _spawnTime > _lifetime)
+            {
+                ReturnToPool();
             }
         }
 
@@ -190,39 +207,12 @@ namespace Polar.Weapons
         {
             _field.SetLastWeaponKnockback(props.KnockbackPower);
 
-            // 머신건은 주로 Gaussian 타입
-            if (props.AreaType == PolarAreaType.Gaussian)
-            {
-                ApplyGaussianDamage(centerIndex, props);
-            }
-            else
-            {
-                _field.ApplyDamageToSector(centerIndex, props.Damage);
-            }
+            // 머신건은 단일 섹터만 타격 (작은 탄환 = 정확한 단일 타격)
+            _field.ApplyDamageToSector(centerIndex, props.Damage);
 
             if (_field.EnableWoundSystem)
             {
                 _field.ApplyWound(centerIndex, props.WoundIntensity);
-            }
-        }
-
-        private void ApplyGaussianDamage(int centerIndex, PolarCombatProperties props)
-        {
-            int radius = props.DamageRadius;
-
-            _field.ApplyDamageToSector(centerIndex, props.Damage);
-
-            for (int offset = 1; offset <= radius; offset++)
-            {
-                float sigma = radius / 3f;
-                float gaussian = Mathf.Exp(-offset * offset / (2f * sigma * sigma));
-                float damage = props.Damage * gaussian;
-
-                int leftIndex = (centerIndex - offset + _field.SectorCount) % _field.SectorCount;
-                int rightIndex = (centerIndex + offset) % _field.SectorCount;
-
-                _field.ApplyDamageToSector(leftIndex, damage);
-                _field.ApplyDamageToSector(rightIndex, damage);
             }
         }
     }

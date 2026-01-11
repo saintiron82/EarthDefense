@@ -1,6 +1,6 @@
-﻿using UnityEngine;
+﻿﻿using Polar.Weapons.Projectiles;
+ using UnityEngine;
 using Script.SystemCore.Pool;
-using Script.SystemCore.Resource;
 
 namespace Polar.Weapons
 {
@@ -13,22 +13,10 @@ namespace Polar.Weapons
     public class PolarMachinegunWeapon : PolarWeaponBase
     {
         private PolarMachinegunWeaponData MachinegunData => weaponData as PolarMachinegunWeaponData;
-        private GameObject _projectilePrefab;
 
         protected override void OnInitialized()
         {
-            LoadProjectilePrefab();
-        }
-
-        private void LoadProjectilePrefab()
-        {
-            if (MachinegunData == null || string.IsNullOrEmpty(MachinegunData.ProjectileBundleId)) return;
-
-            var resource = ResourceService.Instance;
-            if (resource != null)
-            {
-                _projectilePrefab = resource.LoadPrefab(MachinegunData.ProjectileBundleId);
-            }
+            // 초기화 로직 (필요시 추가)
         }
 
         public override void Fire()
@@ -74,7 +62,7 @@ namespace Polar.Weapons
             // PoolService 전용
             if (PoolService.Instance == null || string.IsNullOrEmpty(MachinegunData.ProjectileBundleId))
             {
-                Debug.LogError("[PolarMachinegunWeapon] PoolService not available!");
+                Debug.LogError($"[PolarMachinegunWeapon] -[{MachinegunData.ProjectileBundleId}] PoolService not available!");
                 return;
             }
 

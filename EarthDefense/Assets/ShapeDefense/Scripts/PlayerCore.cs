@@ -16,5 +16,10 @@ namespace ShapeDefense.Scripts
             _health = GetComponent<Health>();
             _weaponController.SetTeamKey(_health.TeamKey);
         }
+
+        private void Start()
+        {
+            Debug.Log($"[PlayerCore] Position: {transform.position}");
+        }
     }
 }

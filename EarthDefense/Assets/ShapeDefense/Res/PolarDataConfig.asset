@@ -15,10 +15,10 @@ MonoBehaviour:
   sectorCount: 560
   earthRadius: 0.5
   initialRadius: 5
-  baseGravityAccel: 0.22
+  baseGravityAccel: 0.05
   gravityMultiplierPerStage: 1.5
   stageTransitionTime: 30
-  enablePulsation: 1
+  enablePulsation: 0
   pulsationAmplitude: 0.041
   pulsationFrequency: 0.7
   phaseOffset: 0.115
@@ -28,10 +28,10 @@ MonoBehaviour:
   smoothingRadius: 8
   smoothingStrength: 0.8
   enableNeighborSmoothing: 1
-  neighborSmoothingStrength: 0.0084
+  neighborSmoothingStrength: 0.017
   enableGlobalRestoration: 1
   globalRestorationStrength: 0.0009
-  enableWoundSystem: 1
+  enableWoundSystem: 0
   woundRecoveryDelay: 2
   woundRecoverySpeed: 0.1
   woundMinRecoveryScale: 0.1
@@ -44,3 +44,9 @@ MonoBehaviour:
   explosionRadius: 10
   explosionWoundIntensity: 0.8
   debugLogInterval: 5
+  baseResistance: 100
+  resistanceRegenRate: 0
+  resistanceDamageMultiplier: 1
+  minKnockback: 0.1
+  maxKnockback: 2
+  knockbackCooldown: 0.5

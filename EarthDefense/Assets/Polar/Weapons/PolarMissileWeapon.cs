@@ -1,6 +1,8 @@
 ﻿using UnityEngine;
 using Script.SystemCore.Pool;
 using Script.SystemCore.Resource;
+using Polar.Weapons.Data;
+using Polar.Weapons.Projectiles;
 
 namespace Polar.Weapons
 {
@@ -13,22 +15,10 @@ namespace Polar.Weapons
     public class PolarMissileWeapon : PolarWeaponBase
     {
         private PolarMissileWeaponData MissileData => weaponData as PolarMissileWeaponData;
-        private GameObject _missilePrefab;
 
         protected override void OnInitialized()
         {
-            LoadMissilePrefab();
-        }
-
-        private void LoadMissilePrefab()
-        {
-            if (MissileData == null || string.IsNullOrEmpty(MissileData.ProjectileBundleId)) return;
-
-            var resource = ResourceService.Instance;
-            if (resource != null)
-            {
-                _missilePrefab = resource.LoadPrefab(MissileData.ProjectileBundleId);
-            }
+            // 초기화 로직 (필요시 추가)
         }
 
         public override void Fire()

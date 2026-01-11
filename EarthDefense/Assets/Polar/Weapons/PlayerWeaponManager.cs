@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using Polar.Weapons.Data;
+using UnityEngine;
 using Script.SystemCore.Resource;
 
 namespace Polar.Weapons
@@ -24,7 +25,7 @@ namespace Polar.Weapons
 
         [Header("Aim Settings")]
         [Tooltip("조준 모드 (PolarAngle: 각도 직접, MouseFollow: 마우스 추적)")]
-        [SerializeField] private bool enableMouseAim = false;
+        [SerializeField] private bool enableMouseAim;
 
         private IPolarField _field;
         private PolarWeaponBase _currentWeapon;

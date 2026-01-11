@@ -29,11 +29,11 @@ namespace Polar.Field
         [SerializeField, Tooltip("섹터 HP(저항력) 기즈모 표기")]
         private bool showResistanceGizmos = true;
         [SerializeField, Tooltip("피해 적용 로그 출력(개발 중 확인용)")]
-        private bool logDamageEvents = false;
+        private bool logDamageEvents;
         [SerializeField, Tooltip("최근 피해 지점만 표시")]
         private bool showDamageGizmos = true;
         [SerializeField, Tooltip("최근 피해 지점 유지 시간(초), 0 이하는 영구 표시")]
-        private float damageGizmoDuration = 0f;
+        private float damageGizmoDuration;
         [SerializeField] private Color damageGizmoColor = Color.red;
         [SerializeField] private float damageGizmoSize = 0.12f;
 
@@ -98,6 +98,18 @@ namespace Polar.Field
             if (enableDebugLogs)
             {
                 Debug.Log($"[PolarFieldController] Initialized with {SectorCount} sectors, InitialRadius={config.InitialRadius}, EarthRadius={EarthRadius}");
+                Debug.Log($"[PolarFieldController] Transform Position: {transform.position}");
+                
+                // 카메라 위치 확인
+                var cam = Camera.main;
+                if (cam != null)
+                {
+                    Debug.Log($"[PolarFieldController] Main Camera Position: {cam.transform.position}");
+                }
+                else
+                {
+                    Debug.LogWarning("[PolarFieldController] Main Camera not found!");
+                }
             }
         }
 
