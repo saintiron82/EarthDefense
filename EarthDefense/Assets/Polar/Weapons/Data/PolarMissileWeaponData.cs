@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using Polar.Weapons;
 
 namespace Polar.Weapons.Data
 {
@@ -53,9 +54,12 @@ namespace Polar.Weapons.Data
         [Tooltip("미사일 색상")]
         [SerializeField] private Color missileColor = Color.red;
 
+        [Header("Projectile Option Profile (optional)")]
+        [SerializeField] private PolarProjectileOptionProfile missileOptions;
+
         public float FireRate => fireRate;
-        public float MissileSpeed => missileSpeed;
-        public float MissileLifetime => missileLifetime;
+        public float MissileSpeed => missileOptions != null ? missileOptions.Speed : missileSpeed;
+        public float MissileLifetime => missileOptions != null ? missileOptions.Lifetime : missileLifetime;
         
         public int CoreRadius => coreRadius;
         public int EffectiveRadius => effectiveRadius;
@@ -66,8 +70,9 @@ namespace Polar.Weapons.Data
         public ExplosionFalloffType FalloffType => falloffType;
         
         public GameObject ExplosionVFXPrefab => explosionVFXPrefab;
-        public float MissileScale => missileScale;
-        public Color MissileColor => missileColor;
+        public float MissileScale => missileOptions != null ? missileOptions.Scale : missileScale;
+        public Color MissileColor => missileOptions != null ? missileOptions.Color : missileColor;
+        public PolarProjectileOptionProfile MissileOptions => missileOptions;
 
         public override string ToJson(bool prettyPrint = true)
         {
@@ -77,8 +82,8 @@ namespace Polar.Weapons.Data
                 baseData = base.ToJson(false),
                 // Missile Specific
                 fireRate = this.fireRate,
-                missileSpeed = this.missileSpeed,
-                missileLifetime = this.missileLifetime,
+                missileSpeed = this.MissileSpeed,
+                missileLifetime = this.MissileLifetime,
                 coreRadius = this.coreRadius,
                 effectiveRadius = this.effectiveRadius,
                 maxRadius = this.maxRadius,
@@ -86,8 +91,8 @@ namespace Polar.Weapons.Data
                 effectiveMinMultiplier = this.effectiveMinMultiplier,
                 maxMinMultiplier = this.maxMinMultiplier,
                 falloffType = this.falloffType.ToString(),
-                missileScale = this.missileScale,
-                missileColor = new[] { missileColor.r, missileColor.g, missileColor.b, missileColor.a }
+                missileScale = this.MissileScale,
+                missileColor = new[] { MissileColor.r, MissileColor.g, MissileColor.b, MissileColor.a }
             };
             
             return JsonUtility.ToJson(data, prettyPrint);

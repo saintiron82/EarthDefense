@@ -29,12 +29,16 @@ namespace Polar.Weapons
         [Tooltip("투사체 색상")]
         [SerializeField] private Color projectileColor = Color.yellow;
 
+        [Header("Projectile Option Profile (optional)")]
+        [SerializeField] private PolarProjectileOptionProfile projectileOptions;
+
         public float FireRate => fireRate;
-        public float ProjectileSpeed => projectileSpeed;
+        public float ProjectileSpeed => projectileOptions != null ? projectileOptions.Speed : projectileSpeed;
         public float SpreadAngle => spreadAngle;
-        public float ProjectileLifetime => projectileLifetime;
-        public float ProjectileScale => projectileScale;
-        public Color ProjectileColor => projectileColor;
+        public float ProjectileLifetime => projectileOptions != null ? projectileOptions.Lifetime : projectileLifetime;
+        public float ProjectileScale => projectileOptions != null ? projectileOptions.Scale : projectileScale;
+        public Color ProjectileColor => projectileOptions != null ? projectileOptions.Color : projectileColor;
+        public PolarProjectileOptionProfile ProjectileOptions => projectileOptions;
 
         public override string ToJson(bool prettyPrint = true)
         {
@@ -44,11 +48,11 @@ namespace Polar.Weapons
                 baseData = base.ToJson(false),
                 // Machinegun Specific
                 fireRate = this.fireRate,
-                projectileSpeed = this.projectileSpeed,
+                projectileSpeed = this.ProjectileSpeed,
                 spreadAngle = this.spreadAngle,
-                projectileLifetime = this.projectileLifetime,
-                projectileScale = this.projectileScale,
-                projectileColor = new[] { projectileColor.r, projectileColor.g, projectileColor.b, projectileColor.a }
+                projectileLifetime = this.ProjectileLifetime,
+                projectileScale = this.ProjectileScale,
+                projectileColor = new[] { ProjectileColor.r, ProjectileColor.g, ProjectileColor.b, ProjectileColor.a }
             };
             
             return JsonUtility.ToJson(data, prettyPrint);

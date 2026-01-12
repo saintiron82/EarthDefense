@@ -54,18 +54,22 @@ namespace Polar.Weapons
         [Tooltip("초당 타격 횟수 (예: 10 = 0.1초마다 1회)")]
         [SerializeField, Min(0.1f)] private float tickRate = 10f;
 
+        [Header("Shared Option Profile (optional)")]
+        [SerializeField] private PolarWeaponOptionProfile optionProfile;
+
         public string Id => id;
         public string WeaponName => weaponName;
         public Sprite Icon => icon;
         public string WeaponBundleId => weaponBundleId;
         public string ProjectileBundleId => projectileBundleId;
-        public float Damage => damage;
-        public float KnockbackPower => knockbackPower;
-        public PolarAreaType AreaType => areaType;
-        public int DamageRadius => Mathf.Max(0, damageRadius);
-        public bool UseGaussianFalloff => useGaussianFalloff;
-        public float WoundIntensity => woundIntensity;
-        public float TickRate => tickRate;
+        public float Damage => optionProfile != null ? optionProfile.Damage : damage;
+        public float KnockbackPower => optionProfile != null ? optionProfile.KnockbackPower : knockbackPower;
+        public PolarAreaType AreaType => optionProfile != null ? optionProfile.AreaType : areaType;
+        public int DamageRadius => optionProfile != null ? optionProfile.DamageRadius : Mathf.Max(0, damageRadius);
+        public bool UseGaussianFalloff => optionProfile != null ? optionProfile.UseGaussianFalloff : useGaussianFalloff;
+        public float WoundIntensity => optionProfile != null ? optionProfile.WoundIntensity : woundIntensity;
+        public float TickRate => optionProfile != null ? optionProfile.TickRate : tickRate;
+        public PolarWeaponOptionProfile OptionProfile => optionProfile;
 
         /// <summary>
         /// JSON으로 내보내기 (직렬화)
@@ -78,13 +82,13 @@ namespace Polar.Weapons
                 weaponName = this.weaponName,
                 weaponBundleId = this.weaponBundleId,
                 projectileBundleId = this.projectileBundleId,
-                damage = this.damage,
-                knockbackPower = this.knockbackPower,
-                areaType = this.areaType.ToString(),
-                damageRadius = this.damageRadius,
-                useGaussianFalloff = this.useGaussianFalloff,
-                woundIntensity = this.woundIntensity,
-                tickRate = this.tickRate
+                damage = this.Damage,
+                knockbackPower = this.KnockbackPower,
+                areaType = this.AreaType.ToString(),
+                damageRadius = this.DamageRadius,
+                useGaussianFalloff = this.UseGaussianFalloff,
+                woundIntensity = this.WoundIntensity,
+                tickRate = this.TickRate
             };
             
             return JsonUtility.ToJson(data, prettyPrint);
