@@ -9,6 +9,97 @@ namespace Polar.Weapons.Editor
     /// </summary>
     public static class PolarWeaponDataJsonUtility
     {
+        #region JSON 파일에서 에셋 생성 (우클릭 메뉴)
+
+        [MenuItem("Assets/Polar/Create Weapon from JSON", false, 900)]
+        private static void CreateWeaponFromJson()
+        {
+            var selected = Selection.activeObject;
+            string path = AssetDatabase.GetAssetPath(selected);
+
+            if (!path.EndsWith(".json"))
+            {
+                EditorUtility.DisplayDialog("Error", "JSON 파일을 선택하세요.", "OK");
+                return;
+            }
+
+            string json = File.ReadAllText(path);
+            string directory = Path.GetDirectoryName(path);
+            string fileName = Path.GetFileNameWithoutExtension(path);
+
+            // JSON에서 타입 추론
+            string weaponType = DetectWeaponType(json);
+            if (string.IsNullOrEmpty(weaponType))
+            {
+                // 타입 선택 다이얼로그
+                int choice = EditorUtility.DisplayDialogComplex(
+                    "무기 타입 선택",
+                    "생성할 무기 타입을 선택하세요.",
+                    "Laser", "Machinegun", "Missile"
+                );
+                weaponType = choice switch { 0 => "laser", 1 => "machinegun", _ => "missile" };
+            }
+
+            // 에셋 생성
+            string assetPath = Path.Combine(directory, fileName + ".asset");
+            assetPath = AssetDatabase.GenerateUniqueAssetPath(assetPath);
+
+            PolarWeaponData weaponData = weaponType switch
+            {
+                "laser" => ScriptableObject.CreateInstance<PolarLaserWeaponData>(),
+                "machinegun" => ScriptableObject.CreateInstance<PolarMachinegunWeaponData>(),
+                "missile" => ScriptableObject.CreateInstance<Polar.Weapons.Data.PolarMissileWeaponData>(),
+                _ => ScriptableObject.CreateInstance<PolarWeaponData>()
+            };
+
+            weaponData.FromJson(json);
+
+            AssetDatabase.CreateAsset(weaponData, assetPath);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            Selection.activeObject = weaponData;
+            EditorGUIUtility.PingObject(weaponData);
+
+            Debug.Log($"[PolarWeaponData] Created weapon asset: {assetPath}");
+        }
+
+        [MenuItem("Assets/Polar/Create Weapon from JSON", true)]
+        private static bool ValidateCreateWeaponFromJson()
+        {
+            var selected = Selection.activeObject;
+            if (selected == null) return false;
+            string path = AssetDatabase.GetAssetPath(selected);
+            return path.EndsWith(".json");
+        }
+
+        private static string DetectWeaponType(string json)
+        {
+            // JSON 내용에서 타입 추론
+            if (json.Contains("\"extendSpeed\"") || json.Contains("\"beamWidth\""))
+                return "laser";
+            if (json.Contains("\"fireRate\"") && json.Contains("\"projectileSpeed\""))
+                return "machinegun";
+            if (json.Contains("\"missileSpeed\"") || json.Contains("\"coreRadius\""))
+                return "missile";
+            if (json.Contains("\"type\""))
+            {
+                // type 필드가 있으면 파싱
+                try
+                {
+                    var typeObj = JsonUtility.FromJson<TypeContainer>(json);
+                    return typeObj?.type?.ToLower();
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        [System.Serializable]
+        private class TypeContainer { public string type; }
+
+        #endregion
+
         [MenuItem("Assets/Polar/Export Weapon Data to JSON", false, 1000)]
         private static void ExportToJson()
         {

@@ -82,8 +82,8 @@ namespace Polar.Weapons.Data
                 baseData = base.ToJson(false),
                 // Missile Specific
                 fireRate = this.fireRate,
-                missileSpeed = this.MissileSpeed,
-                missileLifetime = this.MissileLifetime,
+                missileSpeed = this.missileSpeed,
+                missileLifetime = this.missileLifetime,
                 coreRadius = this.coreRadius,
                 effectiveRadius = this.effectiveRadius,
                 maxRadius = this.maxRadius,
@@ -91,37 +91,83 @@ namespace Polar.Weapons.Data
                 effectiveMinMultiplier = this.effectiveMinMultiplier,
                 maxMinMultiplier = this.maxMinMultiplier,
                 falloffType = this.falloffType.ToString(),
-                missileScale = this.MissileScale,
-                missileColor = new[] { MissileColor.r, MissileColor.g, MissileColor.b, MissileColor.a }
+                missileScale = this.missileScale,
+                missileColor = new[] { this.missileColor.r, this.missileColor.g, this.missileColor.b, this.missileColor.a },
+                missileOptionProfileId = this.missileOptions != null ? this.missileOptions.Id : null
             };
-            
+
             return JsonUtility.ToJson(data, prettyPrint);
         }
 
         public override void FromJson(string json)
         {
             var data = JsonUtility.FromJson<MissileWeaponDataJson>(json);
-            
-            // Base
-            base.FromJson(data.baseData);
-            
-            // Missile Specific
-            this.fireRate = data.fireRate;
-            this.missileSpeed = data.missileSpeed;
-            this.missileLifetime = data.missileLifetime;
-            this.coreRadius = data.coreRadius;
-            this.effectiveRadius = data.effectiveRadius;
-            this.maxRadius = data.maxRadius;
-            this.coreMultiplier = data.coreMultiplier;
-            this.effectiveMinMultiplier = data.effectiveMinMultiplier;
-            this.maxMinMultiplier = data.maxMinMultiplier;
-            this.falloffType = System.Enum.TryParse<ExplosionFalloffType>(data.falloffType, out var parsed) ? parsed : ExplosionFalloffType.Smooth;
-            this.missileScale = data.missileScale;
+
+            // Base - baseData가 있으면 중첩 구조, 없으면 평면 구조
+            if (!string.IsNullOrEmpty(data.baseData))
+            {
+                base.FromJson(data.baseData);
+            }
+            else
+            {
+                base.FromJson(json);
+            }
+
+            // Missile Specific (값이 0보다 크면 적용)
+            if (data.fireRate > 0) this.fireRate = data.fireRate;
+            if (data.missileSpeed > 0) this.missileSpeed = data.missileSpeed;
+            if (data.missileLifetime > 0) this.missileLifetime = data.missileLifetime;
+            if (data.coreRadius > 0) this.coreRadius = data.coreRadius;
+            if (data.effectiveRadius > 0) this.effectiveRadius = data.effectiveRadius;
+            if (data.maxRadius > 0) this.maxRadius = data.maxRadius;
+            if (data.coreMultiplier > 0) this.coreMultiplier = data.coreMultiplier;
+            if (data.effectiveMinMultiplier > 0) this.effectiveMinMultiplier = data.effectiveMinMultiplier;
+            if (data.maxMinMultiplier > 0) this.maxMinMultiplier = data.maxMinMultiplier;
+            if (!string.IsNullOrEmpty(data.falloffType))
+            {
+                this.falloffType = System.Enum.TryParse<ExplosionFalloffType>(data.falloffType, out var parsed) ? parsed : ExplosionFalloffType.Smooth;
+            }
+            if (data.missileScale > 0) this.missileScale = data.missileScale;
             if (data.missileColor != null && data.missileColor.Length == 4)
             {
                 this.missileColor = new Color(data.missileColor[0], data.missileColor[1], data.missileColor[2], data.missileColor[3]);
             }
+
+#if UNITY_EDITOR
+            // missileOptionProfileId가 있으면 프로필 참조 연결 시도
+            if (!string.IsNullOrEmpty(data.missileOptionProfileId))
+            {
+                var profile = FindProjectileOptionProfileById(data.missileOptionProfileId);
+                if (profile != null)
+                {
+                    this.missileOptions = profile;
+                }
+                else
+                {
+                    Debug.LogWarning($"[PolarMissileWeaponData] Missile option profile not found: {data.missileOptionProfileId}");
+                }
+            }
+#endif
         }
+
+#if UNITY_EDITOR
+        private PolarProjectileOptionProfile FindProjectileOptionProfileById(string profileId)
+        {
+            if (string.IsNullOrEmpty(profileId)) return null;
+
+            var guids = UnityEditor.AssetDatabase.FindAssets("t:PolarProjectileOptionProfile");
+            foreach (var guid in guids)
+            {
+                var path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
+                var profile = UnityEditor.AssetDatabase.LoadAssetAtPath<PolarProjectileOptionProfile>(path);
+                if (profile != null && profile.Id == profileId)
+                {
+                    return profile;
+                }
+            }
+            return null;
+        }
+#endif
 
         [System.Serializable]
         private class MissileWeaponDataJson
@@ -139,6 +185,7 @@ namespace Polar.Weapons.Data
             public string falloffType;
             public float missileScale;
             public float[] missileColor;
+            public string missileOptionProfileId;
         }
     }
 }

@@ -97,3 +97,58 @@ var manager = ManagerMaster.Get<MyManager>();
 - `Polar.Field` - Polar coordinate field system
 - `Polar.Weapons` - Weapon system
 - `Polar.Input` - Input handling
+
+---
+
+## Weapon Creation Agent (무기 생성 에이전트)
+
+사용자가 무기 생성을 요청하면 다음 절차를 따릅니다:
+
+### 1. 가이드 문서 참조
+**필수**: `Docs/Polar_Weapon_Agent_Guide.md` 파일을 먼저 읽어서 무기 시스템 구조를 파악합니다.
+
+### 2. 무기 타입 결정
+- **Laser**: 지속 빔 공격, 약점 집중 타격
+- **Machinegun**: 연사 공격, 영역 무력화
+- **Missile**: 폭발 공격, 광역 넉백
+- **Bullet**: 단발 정밀 타격
+
+### 3. JSON 파일 생성
+위치: `Assets/Polar/RES/{WeaponName}.json`
+
+```json
+{
+    "id": "weapon_id",
+    "weaponName": "Display Name",
+    "type": "laser|machinegun|missile|bullet",
+    "damage": 100,
+    ...타입별 필드...
+}
+```
+
+### 4. 밸런스 고려사항
+- Tier 1 (기본): damage 50-200
+- Tier 2 (고급): damage 200-500
+- Tier 3 (희귀): damage 500-1000
+- Tier 4 (전설): damage 1000-5000
+
+### 5. 에셋 변환 안내
+JSON 생성 후 사용자에게 안내:
+> Unity에서 해당 JSON 파일 우클릭 → "Assets > Polar > Create Weapon from JSON"
+
+### 예시 요청 및 응답
+
+**요청**: "보스전용 고데미지 레이저 만들어줘"
+**분석**: 좁은 빔 + 높은 DPS + 긴 지속시간
+**결과**:
+```json
+{
+    "id": "boss_killer_laser",
+    "weaponName": "Boss Killer Laser",
+    "type": "laser",
+    "damage": 2000,
+    "beamWidth": 0.3,
+    "duration": 5,
+    "beamColor": [1, 0, 0, 1]
+}
+```

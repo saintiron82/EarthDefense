@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where:*)",
+      "Bash(reg query \"HKEY_CURRENT_USER\\\\Software\\\\Unity Technologies\\\\Installer\" /s)",
+      "Bash(findstr:*)",
+      "Bash(dir:*)",
+      "Bash(powershell:*)",
+      "Bash(ls -la \"C:\\\\Users\\\\saintiron\\\\EarthDefense\\\\EarthDefense\\\\.claude\\\\agents\"\" && cat \"C:UserssaintironEarthDefenseEarthDefense.claudeagentsweapon-create.md \")"
+    ]
+  }
+}

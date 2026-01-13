@@ -1,0 +1,19 @@
+{
+    "id": "TestLaser",
+    "weaponName": "Test Laser",
+    "weaponBundleId": "Laser",
+    "projectileBundleId": "Beam",
+    "damage": 500,
+    "knockbackPower": 0.3,
+    "areaType": "Fixed",
+    "damageRadius": 0,
+    "useGaussianFalloff": true,
+    "woundIntensity": 0.25,
+    "tickRate": 10,
+    "extendSpeed": 60,
+    "retractSpeed": 80,
+    "maxLength": 40,
+    "beamWidth": 1.2,
+    "beamColor": [0, 1, 0.5, 1],
+    "duration": 3
+}

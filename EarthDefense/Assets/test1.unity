@@ -473,7 +473,7 @@ MonoBehaviour:
   weaponSlot: {fileID: 1434197946}
   defaultWeaponData: {fileID: 0}
   dataTable: {fileID: 11400000, guid: 87fc21ad410303048a86ba8df915f388, type: 2}
-  defaultWeaponId: MissileTurret
+  defaultWeaponId: Laser
   enableMouseAim: 1
 --- !u!1 &573076704
 GameObject:

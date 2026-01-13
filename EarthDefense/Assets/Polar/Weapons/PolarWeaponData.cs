@@ -82,15 +82,16 @@ namespace Polar.Weapons
                 weaponName = this.weaponName,
                 weaponBundleId = this.weaponBundleId,
                 projectileBundleId = this.projectileBundleId,
-                damage = this.Damage,
-                knockbackPower = this.KnockbackPower,
-                areaType = this.AreaType.ToString(),
-                damageRadius = this.DamageRadius,
-                useGaussianFalloff = this.UseGaussianFalloff,
-                woundIntensity = this.WoundIntensity,
-                tickRate = this.TickRate
+                damage = this.damage,
+                knockbackPower = this.knockbackPower,
+                areaType = this.areaType.ToString(),
+                damageRadius = this.damageRadius,
+                useGaussianFalloff = this.useGaussianFalloff,
+                woundIntensity = this.woundIntensity,
+                tickRate = this.tickRate,
+                optionProfileId = this.optionProfile != null ? this.optionProfile.Id : null
             };
-            
+
             return JsonUtility.ToJson(data, prettyPrint);
         }
 
@@ -100,7 +101,7 @@ namespace Polar.Weapons
         public virtual void FromJson(string json)
         {
             var data = JsonUtility.FromJson<WeaponDataJson>(json);
-            
+
             this.id = data.id;
             this.weaponName = data.weaponName;
             this.weaponBundleId = data.weaponBundleId;
@@ -112,6 +113,22 @@ namespace Polar.Weapons
             this.useGaussianFalloff = data.useGaussianFalloff;
             this.woundIntensity = data.woundIntensity;
             this.tickRate = data.tickRate;
+
+#if UNITY_EDITOR
+            // optionProfileId가 있으면 프로필 참조 연결 시도
+            if (!string.IsNullOrEmpty(data.optionProfileId))
+            {
+                var profile = FindOptionProfileById(data.optionProfileId);
+                if (profile != null)
+                {
+                    this.optionProfile = profile;
+                }
+                else
+                {
+                    Debug.LogWarning($"[PolarWeaponData] Option profile not found: {data.optionProfileId}");
+                }
+            }
+#endif
         }
 
         /// <summary>
@@ -131,7 +148,30 @@ namespace Polar.Weapons
             public bool useGaussianFalloff;
             public float woundIntensity;
             public float tickRate;
+            public string optionProfileId;
         }
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// optionProfileId로 프로필 참조를 연결 (에디터 전용)
+        /// </summary>
+        protected PolarWeaponOptionProfile FindOptionProfileById(string profileId)
+        {
+            if (string.IsNullOrEmpty(profileId)) return null;
+
+            var guids = UnityEditor.AssetDatabase.FindAssets("t:PolarWeaponOptionProfile");
+            foreach (var guid in guids)
+            {
+                var path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
+                var profile = UnityEditor.AssetDatabase.LoadAssetAtPath<PolarWeaponOptionProfile>(path);
+                if (profile != null && profile.Id == profileId)
+                {
+                    return profile;
+                }
+            }
+            return null;
+        }
+#endif
     }
 
     /// <summary>

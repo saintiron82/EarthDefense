@@ -1,0 +1,21 @@
+{
+    "id": "reflect_laser",
+    "weaponName": "Reflect Laser",
+    "type": "laser",
+    "damage": 300,
+    "knockbackPower": 0.3,
+    "areaType": "Fixed",
+    "damageRadius": 0,
+    "useGaussianFalloff": false,
+    "woundIntensity": 0.25,
+    "tickRate": 20,
+    "extendSpeed": 80,
+    "retractSpeed": 100,
+    "maxLength": 50,
+    "beamWidth": 0.3,
+    "beamColor": [0.8, 0.8, 1, 1],
+    "duration": 3,
+    "reflectCount": 3,
+    "reflectDamageMultiplier": 0.7,
+    "reflectAngleRange": 45
+}

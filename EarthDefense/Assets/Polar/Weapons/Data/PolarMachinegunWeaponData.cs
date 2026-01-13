@@ -48,34 +48,77 @@ namespace Polar.Weapons
                 baseData = base.ToJson(false),
                 // Machinegun Specific
                 fireRate = this.fireRate,
-                projectileSpeed = this.ProjectileSpeed,
+                projectileSpeed = this.projectileSpeed,
                 spreadAngle = this.spreadAngle,
-                projectileLifetime = this.ProjectileLifetime,
-                projectileScale = this.ProjectileScale,
-                projectileColor = new[] { ProjectileColor.r, ProjectileColor.g, ProjectileColor.b, ProjectileColor.a }
+                projectileLifetime = this.projectileLifetime,
+                projectileScale = this.projectileScale,
+                projectileColor = new[] { this.projectileColor.r, this.projectileColor.g, this.projectileColor.b, this.projectileColor.a },
+                projectileOptionProfileId = this.projectileOptions != null ? this.projectileOptions.Id : null
             };
-            
+
             return JsonUtility.ToJson(data, prettyPrint);
         }
 
         public override void FromJson(string json)
         {
             var data = JsonUtility.FromJson<MachinegunWeaponDataJson>(json);
-            
-            // Base
-            base.FromJson(data.baseData);
-            
-            // Machinegun Specific
-            this.fireRate = data.fireRate;
-            this.projectileSpeed = data.projectileSpeed;
-            this.spreadAngle = data.spreadAngle;
-            this.projectileLifetime = data.projectileLifetime;
-            this.projectileScale = data.projectileScale;
+
+            // Base - baseData가 있으면 중첩 구조, 없으면 평면 구조
+            if (!string.IsNullOrEmpty(data.baseData))
+            {
+                base.FromJson(data.baseData);
+            }
+            else
+            {
+                base.FromJson(json);
+            }
+
+            // Machinegun Specific (값이 0보다 크면 적용)
+            if (data.fireRate > 0) this.fireRate = data.fireRate;
+            if (data.projectileSpeed > 0) this.projectileSpeed = data.projectileSpeed;
+            if (data.spreadAngle > 0) this.spreadAngle = data.spreadAngle;
+            if (data.projectileLifetime > 0) this.projectileLifetime = data.projectileLifetime;
+            if (data.projectileScale > 0) this.projectileScale = data.projectileScale;
             if (data.projectileColor != null && data.projectileColor.Length == 4)
             {
                 this.projectileColor = new Color(data.projectileColor[0], data.projectileColor[1], data.projectileColor[2], data.projectileColor[3]);
             }
+
+#if UNITY_EDITOR
+            // projectileOptionProfileId가 있으면 프로필 참조 연결 시도
+            if (!string.IsNullOrEmpty(data.projectileOptionProfileId))
+            {
+                var profile = FindProjectileOptionProfileById(data.projectileOptionProfileId);
+                if (profile != null)
+                {
+                    this.projectileOptions = profile;
+                }
+                else
+                {
+                    Debug.LogWarning($"[PolarMachinegunWeaponData] Projectile option profile not found: {data.projectileOptionProfileId}");
+                }
+            }
+#endif
         }
+
+#if UNITY_EDITOR
+        private PolarProjectileOptionProfile FindProjectileOptionProfileById(string profileId)
+        {
+            if (string.IsNullOrEmpty(profileId)) return null;
+
+            var guids = UnityEditor.AssetDatabase.FindAssets("t:PolarProjectileOptionProfile");
+            foreach (var guid in guids)
+            {
+                var path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
+                var profile = UnityEditor.AssetDatabase.LoadAssetAtPath<PolarProjectileOptionProfile>(path);
+                if (profile != null && profile.Id == profileId)
+                {
+                    return profile;
+                }
+            }
+            return null;
+        }
+#endif
 
         [System.Serializable]
         private class MachinegunWeaponDataJson
@@ -87,6 +130,7 @@ namespace Polar.Weapons
             public float projectileLifetime;
             public float projectileScale;
             public float[] projectileColor;
+            public string projectileOptionProfileId;
         }
     }
 }

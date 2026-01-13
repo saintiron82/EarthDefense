@@ -32,6 +32,11 @@ namespace Polar.Weapons
         private PolarWeaponData _currentWeaponData;
         private string _currentWeaponId;
 
+        private void Start()
+        {
+            // 자동 초기화
+            Init();
+        }
 
         public void Init()
         {

@@ -1,0 +1,18 @@
+{
+    "id": "reflect_laser_childbeam",
+    "weaponName": "Reflect Laser (ChildBeam)",
+    "type": "laser",
+    "damage": 300,
+    "tickRate": 10,
+    "knockbackPower": 5,
+    "extendSpeed": 80,
+    "retractSpeed": 100,
+    "maxLength": 50,
+    "beamWidth": 0.3,
+    "beamColor": [1.0, 0.5, 0.2, 1.0],
+    "duration": 0,
+    "reflectMode": 1,
+    "reflectCount": 3,
+    "reflectDamageMultiplier": 0.7,
+    "reflectAngleRange": 30
+}

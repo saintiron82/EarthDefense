@@ -42,6 +42,59 @@ namespace Polar.Weapons
         public GameObject ImpactEffectPrefab => impactEffectPrefab;
         public string FireSoundId => fireSoundId;
         public string ImpactSoundId => impactSoundId;
+
+        public override string ToJson(bool prettyPrint = true)
+        {
+            var data = new BulletWeaponDataJson
+            {
+                // Base
+                baseData = base.ToJson(false),
+                // Bullet Specific
+                bulletColor = new[] { this.bulletColor.r, this.bulletColor.g, this.bulletColor.b, this.bulletColor.a },
+                bulletScale = this.bulletScale,
+                bulletSpeed = this.bulletSpeed,
+                fireSoundId = this.fireSoundId,
+                impactSoundId = this.impactSoundId
+            };
+
+            return JsonUtility.ToJson(data, prettyPrint);
+        }
+
+        public override void FromJson(string json)
+        {
+            var data = JsonUtility.FromJson<BulletWeaponDataJson>(json);
+
+            // Base - baseData가 있으면 중첩 구조, 없으면 평면 구조
+            if (!string.IsNullOrEmpty(data.baseData))
+            {
+                base.FromJson(data.baseData);
+            }
+            else
+            {
+                base.FromJson(json);
+            }
+
+            // Bullet Specific (값이 있으면 적용)
+            if (data.bulletColor != null && data.bulletColor.Length == 4)
+            {
+                this.bulletColor = new Color(data.bulletColor[0], data.bulletColor[1], data.bulletColor[2], data.bulletColor[3]);
+            }
+            if (data.bulletScale > 0) this.bulletScale = data.bulletScale;
+            if (data.bulletSpeed > 0) this.bulletSpeed = data.bulletSpeed;
+            if (!string.IsNullOrEmpty(data.fireSoundId)) this.fireSoundId = data.fireSoundId;
+            if (!string.IsNullOrEmpty(data.impactSoundId)) this.impactSoundId = data.impactSoundId;
+        }
+
+        [System.Serializable]
+        private class BulletWeaponDataJson
+        {
+            public string baseData;
+            public float[] bulletColor;
+            public float bulletScale;
+            public float bulletSpeed;
+            public string fireSoundId;
+            public string impactSoundId;
+        }
     }
 }
 
