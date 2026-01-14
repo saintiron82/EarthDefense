@@ -246,6 +246,17 @@ namespace Polar.Weapons
         }
 
         /// <summary>
+        /// 발사 시작 (레이저용)
+        /// </summary>
+        public void StartFire()
+        {
+            if (_currentWeapon is PolarLaserWeapon laser)
+            {
+                laser.StartFire();
+            }
+        }
+
+        /// <summary>
         /// 특정 각도로 발사 (머신건/미사일용)
         /// </summary>
         public void Fire(float angleDeg)

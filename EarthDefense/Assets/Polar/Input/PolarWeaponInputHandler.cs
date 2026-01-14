@@ -34,6 +34,8 @@ namespace Polar.Input
         private PolarInputActionsRuntime _runtimeActions;  // ✅ Polar 전용
         private InputAction _attackAction;
         private bool _isInitialized;
+
+        private bool _wasAttackPressed;
         
         private void Awake()
         {
@@ -113,13 +115,27 @@ namespace Polar.Input
 
             // 공격 입력 처리
             bool attackPressed = _attackAction != null && _attackAction.IsPressed();
-            bool attackJustPressed = _attackAction != null && _attackAction.WasPressedThisFrame();
             bool attackReleased = _attackAction != null && _attackAction.WasReleasedThisFrame();
+
+            bool attackJustPressed;
+            if (_attackAction != null)
+            {
+                attackJustPressed = _attackAction.WasPressedThisFrame();
+            }
+            else
+            {
+                attackJustPressed = attackPressed && !_wasAttackPressed;
+            }
 
             // 발사 처리
             if (holdToFire)
             {
-                // 홀드 모드: 누르는 동안 연속 발사
+                // 홀드 모드: 누르는 동안 조준 업데이트, 눌림 순간에만 신규 빔 생성
+                if (attackJustPressed)
+                {
+                    weaponManager.StartFire();
+                }
+
                 if (attackPressed)
                 {
                     weaponManager.Fire();
@@ -137,6 +153,8 @@ namespace Polar.Input
                     weaponManager.Fire();
                 }
             }
+
+            _wasAttackPressed = attackPressed;
         }
         
         private void OnDrawGizmos()

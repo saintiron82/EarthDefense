@@ -16,6 +16,7 @@ namespace Polar.Weapons
         private PolarLaserWeaponData LaserData => weaponData as PolarLaserWeaponData;
         private PolarLaserProjectile _activeBeam;
 
+        private bool _isFiring;
 
         public override void Fire()
         {
@@ -24,15 +25,41 @@ namespace Polar.Weapons
             Vector2 origin = Muzzle.position;
             Vector2 direction = Muzzle.right;
 
-            // 이미 활성 빔이 있으면 위치/방향만 갱신
+            // 활성 빔이 있으면 위치/방향만 갱신
             if (_activeBeam != null && _activeBeam.IsActive)
             {
                 _activeBeam.UpdateOriginDirection(origin, direction);
-                Debug.Log($"[PolarLaserWeapon] Fire (Update) - Origin: {origin}, Direction: {direction}, Frame: {Time.frameCount}");
+                if (_isFiring)
+                {
+                    Debug.Log($"[PolarLaserWeapon] Fire (Update) - Origin: {origin}, Direction: {direction}, Frame: {Time.frameCount}");
+                }
                 return;
             }
 
-            Debug.Log($"[PolarLaserWeapon] Fire (NEW BEAM) - Origin: {origin}, Direction: {direction}, Frame: {Time.frameCount}, Time: {Time.time:F4}");
+            // 입력 핸들러가 hold-to-fire 모드일 경우 매 프레임 Fire()가 호출되므로,
+            // 여기서 신규 스폰을 막고 StartFire()에서만 신규 빔을 생성한다.
+        }
+
+        /// <summary>
+        /// 발사 시작(클릭/눌림 이벤트)
+        /// - 이미 빔이 있으면 즉시 새 빔을 만들기 위해 기존 빔은 FlyAway로 전환
+        /// </summary>
+        public void StartFire()
+        {
+            if (_field == null || LaserData == null) return;
+
+            _isFiring = true;
+
+            Vector2 origin = Muzzle.position;
+            Vector2 direction = Muzzle.right;
+
+            if (_activeBeam != null && _activeBeam.IsActive)
+            {
+                _activeBeam.BeginFlyAway();
+                _activeBeam = null;
+            }
+
+            Debug.Log($"[PolarLaserWeapon] StartFire (NEW BEAM) - Origin: {origin}, Direction: {direction}, Frame: {Time.frameCount}, Time: {Time.time:F4}");
             SpawnBeam(origin, direction);
         }
 
@@ -63,6 +90,8 @@ namespace Polar.Weapons
         /// </summary>
         public void StopFire()
         {
+            _isFiring = false;
+
             if (_activeBeam != null)
             {
                 Debug.Log($"[PolarLaserWeapon] StopFire - Frame: {Time.frameCount}, Time: {Time.time:F4}");
