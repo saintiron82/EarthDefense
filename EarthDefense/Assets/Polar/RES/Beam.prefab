@@ -46,7 +46,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Polar.Weapons.PolarLaserProjectile
   lineRenderer: {fileID: 4453000932407359804}
-  logTickDamage: 0
+  logTickDamage: 1
+  showDamageGizmos: 1
+  gizmoHitSectorColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  maxRenderPoints: 30
+  curveAngleThreshold: 2
+  maxSkipSamples: 5
 --- !u!120 &4453000932407359804
 LineRenderer:
   serializedVersion: 3
