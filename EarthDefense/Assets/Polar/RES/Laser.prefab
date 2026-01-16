@@ -127,3 +127,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Polar.Weapons.PolarLaserWeapon
   weaponData: {fileID: 0}
   weaponArm: {fileID: 3820951224509514262}
+  logReflect: 1

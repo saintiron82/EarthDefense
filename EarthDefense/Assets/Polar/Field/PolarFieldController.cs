@@ -547,7 +547,7 @@ namespace Polar.Field
 
             if (logDamageEvents)
             {
-                Debug.Log($"[PolarFieldController] Damage sector {index} -{actualDamage:F2} (hp {before:F2} -> {_sectorResistances[index]:F2})");
+//                Debug.Log($"[PolarFieldController] Damage sector {index} -{actualDamage:F2} (hp {before:F2} -> {_sectorResistances[index]:F2})");
             }
             
             // 라인 붕괴 체크
@@ -557,7 +557,7 @@ namespace Polar.Field
                 
                 if (enableDebugLogs)
                 {
-                    Debug.Log($"[PolarFieldController] Line Break! Sector {index} resistance depleted");
+  //                  Debug.Log($"[PolarFieldController] Line Break! Sector {index} resistance depleted");
                 }
             }
         }

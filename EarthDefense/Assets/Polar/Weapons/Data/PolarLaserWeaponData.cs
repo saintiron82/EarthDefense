@@ -1,4 +1,4 @@
-﻿﻿using UnityEngine;
+﻿using UnityEngine;
 
 namespace Polar.Weapons
 {
@@ -18,6 +18,25 @@ namespace Polar.Weapons
         /// - 각 빔이 독립적인 LineRenderer를 가짐
         /// </summary>
         ChildBeam = 1
+    }
+
+    /// <summary>
+    /// 레이저 발사/시각 모드
+    /// </summary>
+    public enum PolarLaserFireMode
+    {
+        /// <summary>
+        /// 파티클 스트림 기반 곡선 레이저 (기존)
+        /// </summary>
+        ParticleStream = 0,
+
+        /// <summary>
+        /// 히트스캔 직선 레이저
+        /// - 발사 즉시 벽(목표)까지 도달
+        /// - 워밍업이 끝난 시점부터 데미지 틱 적용
+        /// - 릴리즈 시 데미지 즉시 중단 후 페이드아웃
+        /// </summary>
+        HitscanWarmup = 1
     }
 
     /// <summary>
@@ -45,9 +64,28 @@ namespace Polar.Weapons
         [Tooltip("지속 시간 (0 = 무한)")]
         [SerializeField, Min(0f)] private float duration = 2f;
 
+        [Header("Fire Mode")]
+        [Tooltip("레이저 발사/시각 모드\n- ParticleStream: 곡선(파티클 스트림)\n- HitscanWarmup: 직선(히트스캔+워밍업)")]
+        [SerializeField] private PolarLaserFireMode fireMode = PolarLaserFireMode.ParticleStream;
+
+        [Tooltip("히트스캔 모드: 워밍업 시간 (초). 이 시간이 지난 뒤부터 데미지 적용")]
+        [SerializeField, Min(0f)] private float hitscanWarmupDuration = 0.15f;
+
+        [Tooltip("히트스캔 모드: 릴리즈 후 페이드아웃 시간 (초)")]
+        [SerializeField, Min(0f)] private float hitscanFadeOutDuration = 0.15f;
+
+        [Tooltip("히트스캔 모드: 워밍업 시작 시 알파(0~1)")]
+        [SerializeField, Range(0f, 1f)] private float hitscanStartAlpha = 0.2f;
+
+        [Tooltip("히트스캔 모드: 워밍업 시작 시 폭 배율")]
+        [SerializeField, Min(0.01f)] private float hitscanStartWidthMultiplier = 0.7f;
+
         [Header("Reflect Settings")]
         [Tooltip("반사 모드\n- Segment: 하나의 연결된 빔 (LineRenderer 다중 포인트)\n- ChildBeam: 독립 빔들이 부모-자식 관계로 연결")]
         [SerializeField] private LaserReflectMode reflectMode = LaserReflectMode.Segment;
+
+        [Tooltip("반사 빔(ChildBeam) 전용 투사체 프리팹 번들 ID (비워두면 ProjectileBundleId를 재사용)")]
+        [SerializeField] private string childBeamProjectileBundleId;
 
         [Tooltip("반사 횟수 (0 = 반사 안함)")]
         [SerializeField, Min(0)] private int reflectCount = 0;
@@ -63,7 +101,15 @@ namespace Polar.Weapons
         public float BeamWidth => beamWidth;
         public Color BeamColor => beamColor;
         public float Duration => duration;
+
+        public PolarLaserFireMode FireMode => fireMode;
+        public float HitscanWarmupDuration => hitscanWarmupDuration;
+        public float HitscanFadeOutDuration => hitscanFadeOutDuration;
+        public float HitscanStartAlpha => hitscanStartAlpha;
+        public float HitscanStartWidthMultiplier => hitscanStartWidthMultiplier;
+
         public LaserReflectMode ReflectMode => reflectMode;
+        public string ChildBeamProjectileBundleId => childBeamProjectileBundleId;
         public int ReflectCount => reflectCount;
         public float ReflectDamageMultiplier => reflectDamageMultiplier;
         public float ReflectAngleRange => reflectAngleRange;
@@ -80,8 +126,15 @@ namespace Polar.Weapons
                 beamWidth = this.beamWidth,
                 beamColor = new[] { beamColor.r, beamColor.g, beamColor.b, beamColor.a },
                 duration = this.duration,
+                // Fire Mode
+                fireMode = (int)this.fireMode,
+                hitscanWarmupDuration = this.hitscanWarmupDuration,
+                hitscanFadeOutDuration = this.hitscanFadeOutDuration,
+                hitscanStartAlpha = this.hitscanStartAlpha,
+                hitscanStartWidthMultiplier = this.hitscanStartWidthMultiplier,
                 // Reflect Settings
                 reflectMode = (int)this.reflectMode,
+                childBeamProjectileBundleId = this.childBeamProjectileBundleId,
                 reflectCount = this.reflectCount,
                 reflectDamageMultiplier = this.reflectDamageMultiplier,
                 reflectAngleRange = this.reflectAngleRange
@@ -94,17 +147,15 @@ namespace Polar.Weapons
         {
             var data = JsonUtility.FromJson<LaserWeaponDataJson>(json);
 
-            // Base - baseData가 있으면 중첩 구조, 없으면 평면 구조
             if (!string.IsNullOrEmpty(data.baseData))
             {
                 base.FromJson(data.baseData);
             }
             else
             {
-                base.FromJson(json);  // 평면 JSON인 경우 전체 JSON을 base에 전달
+                base.FromJson(json);
             }
 
-            // Laser Specific (값이 0이 아닌 경우만 적용 - 평면 JSON 호환)
             if (data.beamSpeed > 0) this.beamSpeed = data.beamSpeed;
             if (data.maxLength > 0) this.maxLength = data.maxLength;
             if (data.beamWidth > 0) this.beamWidth = data.beamWidth;
@@ -114,8 +165,14 @@ namespace Polar.Weapons
             }
             if (data.duration > 0) this.duration = data.duration;
 
-            // Reflect Settings (기본값 0이 유효하므로 항상 적용)
+            this.fireMode = (PolarLaserFireMode)data.fireMode;
+            if (data.hitscanWarmupDuration >= 0) this.hitscanWarmupDuration = data.hitscanWarmupDuration;
+            if (data.hitscanFadeOutDuration >= 0) this.hitscanFadeOutDuration = data.hitscanFadeOutDuration;
+            if (data.hitscanStartAlpha >= 0) this.hitscanStartAlpha = data.hitscanStartAlpha;
+            if (data.hitscanStartWidthMultiplier > 0) this.hitscanStartWidthMultiplier = data.hitscanStartWidthMultiplier;
+
             this.reflectMode = (LaserReflectMode)data.reflectMode;
+            this.childBeamProjectileBundleId = data.childBeamProjectileBundleId;
             this.reflectCount = data.reflectCount;
             if (data.reflectDamageMultiplier > 0) this.reflectDamageMultiplier = data.reflectDamageMultiplier;
             if (data.reflectAngleRange >= 0) this.reflectAngleRange = data.reflectAngleRange;
@@ -130,7 +187,15 @@ namespace Polar.Weapons
             public float beamWidth;
             public float[] beamColor;
             public float duration;
+
+            public int fireMode;
+            public float hitscanWarmupDuration;
+            public float hitscanFadeOutDuration;
+            public float hitscanStartAlpha;
+            public float hitscanStartWidthMultiplier;
+
             public int reflectMode;
+            public string childBeamProjectileBundleId;
             public int reflectCount;
             public float reflectDamageMultiplier;
             public float reflectAngleRange;
