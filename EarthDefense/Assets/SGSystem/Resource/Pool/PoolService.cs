@@ -31,6 +31,8 @@ namespace Script.SystemCore.Pool
         private Transform _poolRoot;
         private bool _initialized;
 
+        private const string RuntimeBundlePrefix = "runtime://";
+
         public override async UniTask<bool> Init()
         {
             await base.Init();
@@ -351,15 +353,15 @@ namespace Script.SystemCore.Pool
 
         private object CreateTypedPool<T>(string bundleId, string poolKey) where T : Component
         {
-            if (_resourceService == null)
-            {
-                Debug.LogError("[PoolService] ResourceService is not set");
-                return null;
-            }
-
-            // 프리팹 로드 (캐시 확인)
+            // 동적 등록 prefab이 있으면 ResourceService 없이도 허용
             if (!_prefabs.TryGetValue(bundleId, out var prefab))
             {
+                if (_resourceService == null)
+                {
+                    Debug.LogError("[PoolService] ResourceService is not set");
+                    return null;
+                }
+
                 prefab = _resourceService.LoadPrefab(bundleId);
                 if (prefab == null)
                 {
@@ -380,7 +382,7 @@ namespace Script.SystemCore.Pool
             // 풀 설정
             if (!_configs.TryGetValue(bundleId, out var poolConfig))
             {
-                poolConfig = _resourceService.GetPoolConfig(bundleId);
+                poolConfig = _resourceService != null ? _resourceService.GetPoolConfig(bundleId) : null;
                 if (poolConfig == null || !poolConfig.enabled)
                 {
                     poolConfig = fallbackPoolConfig;
@@ -481,6 +483,80 @@ namespace Script.SystemCore.Pool
             {
                 _resourceService.ReleaseResource(bundleId);
             }
+        }
+
+        #endregion
+
+        #region Dynamic Register API
+
+        /// <summary>
+        /// 런타임에 프리팹을 풀에 동적으로 등록합니다.
+        /// - ResourceService를 거치지 않고 bundleId로 Get/Preload가 가능해집니다.
+        /// - 동일 bundleId가 이미 등록되어 있으면 덮어쓸 수 있습니다(기본: false).
+        /// </summary>
+        public bool RegisterPrefab(string bundleId, GameObject prefab, PoolConfig config = null, bool overwrite = false)
+        {
+            if (string.IsNullOrEmpty(bundleId))
+            {
+                Debug.LogWarning("[PoolService] RegisterPrefab failed: bundleId is null/empty");
+                return false;
+            }
+
+            if (prefab == null)
+            {
+                Debug.LogWarning("[PoolService] RegisterPrefab failed: prefab is null");
+                return false;
+            }
+
+            Initialize();
+
+            if (!overwrite && _prefabs.ContainsKey(bundleId))
+            {
+                return false;
+            }
+
+            _prefabs[bundleId] = prefab;
+            _configs[bundleId] = config != null ? config : fallbackPoolConfig;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log($"[PoolService] RegisterPrefab: {bundleId} ({prefab.name})");
+#endif
+            return true;
+        }
+
+        /// <summary>
+        /// 런타임 자동 ID로 프리팹을 등록합니다. (충돌 방지)
+        /// </summary>
+        public string RegisterPrefabAutoId(GameObject prefab, string nameHint = null, PoolConfig config = null)
+        {
+            if (prefab == null)
+            {
+                Debug.LogWarning("[PoolService] RegisterPrefabAutoId failed: prefab is null");
+                return null;
+            }
+
+            Initialize();
+
+            var hint = string.IsNullOrWhiteSpace(nameHint) ? prefab.name : nameHint;
+            hint = SanitizeIdPart(hint);
+
+            // 예: runtime://MissileProjectile/20260126T123456Z/8f3a...
+            var id = $"{RuntimeBundlePrefix}{hint}/{System.DateTime.UtcNow:yyyyMMddTHHmmssZ}/{System.Guid.NewGuid():N}";
+
+            RegisterPrefab(id, prefab, config, overwrite: false);
+            return id;
+        }
+
+        private static string SanitizeIdPart(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return "prefab";
+
+            // 최소 규칙: 공백/슬래시/역슬래시를 '_'로 치환
+            return raw
+                .Trim()
+                .Replace(' ', '_')
+                .Replace('/', '_')
+                .Replace('\\', '_');
         }
 
         #endregion

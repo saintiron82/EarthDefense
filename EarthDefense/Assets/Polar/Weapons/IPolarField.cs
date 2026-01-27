@@ -17,5 +17,10 @@
         void ApplyDamageToSector(int sectorIndex, float damage);
         void SetLastWeaponKnockback(float power);
         void ApplyWound(int sectorIndex, float intensity);
+        
+        /// <summary>
+        /// 특정 섹터의 속도 배율 조회 (1.0 = 정상, 0.5 = 50% 둔화)
+        /// </summary>
+        float GetSectorSpeedMultiplier(int sectorIndex);
     }
 }

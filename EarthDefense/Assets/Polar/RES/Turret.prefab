@@ -89,7 +89,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8850195437558915605}
-  - component: {fileID: 3982230872785391532}
+  - component: {fileID: 7025462890781506272}
   m_Layer: 0
   m_Name: Turret
   m_TagString: Untagged
@@ -113,7 +113,7 @@ Transform:
   - {fileID: 7189625600044816223}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &3982230872785391532
+--- !u!114 &7025462890781506272
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -122,8 +122,8 @@ MonoBehaviour:
   m_GameObject: {fileID: 9110546861258179167}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a8014e222f530094e86c193a9f715660, type: 3}
+  m_Script: {fileID: 11500000, guid: d86463696e9d44c0951e97da057d4f7f, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Polar.Weapons.PolarLaserWeapon
+  m_EditorClassIdentifier: Assembly-CSharp::Polar.Weapons.PolarProjectileWeapon
   weaponData: {fileID: 0}
-  weaponArm: {fileID: 3820951224509514262}
+  muzzle: {fileID: 8553108592419354944}

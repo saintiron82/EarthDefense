@@ -97,6 +97,19 @@ namespace Polar.Weapons.Projectiles
         public Vector2 SegmentEndPoint => _hitscanEndPoint;
 
         private float _damageMultiplier = 1f;
+        private float _widthMultiplier = 1f;
+        private float _tickRateMultiplier = 1f;
+        private float _maxLengthOverride = 0f; // 0이면 weaponData.MaxLength 사용
+        
+        // 자식 빔 자동 라이프사이클
+        private bool _isChildBeam = false; // 자식 빔 여부
+        private float _childBeamDuration = 0f; // 자식 빔 지속 시간 (초)
+        private float _childBeamAge = 0f; // 자식 빔 생성 후 경과 시간
+
+        /// <summary>
+        /// 데미지 틱 발생 시 반사 처리를 위한 콜백 (PolarLaserWeapon에서 설정)
+        /// </summary>
+        public System.Action<Vector2, Vector2> OnDamageTick;
 
         /// <summary>
         /// 반사/특수 처리용 데미지 배율. 1.0 = 원본.
@@ -104,6 +117,49 @@ namespace Polar.Weapons.Projectiles
         public void SetDamageMultiplier(float multiplier)
         {
             _damageMultiplier = Mathf.Max(0f, multiplier);
+        }
+
+        /// <summary>
+        /// 자식 빔의 폭 배율 설정
+        /// </summary>
+        public void SetWidthMultiplier(float multiplier)
+        {
+            _widthMultiplier = Mathf.Max(0.01f, multiplier);
+        }
+
+        /// <summary>
+        /// 자식 빔의 틱 레이트 배율 설정
+        /// </summary>
+        public void SetTickRateMultiplier(float multiplier)
+        {
+            _tickRateMultiplier = Mathf.Max(0.1f, multiplier);
+        }
+
+        /// <summary>
+        /// 자식 빔의 최대 길이 오버라이드 (0 = weaponData 값 사용)
+        /// </summary>
+        public void SetMaxLengthOverride(float maxLength)
+        {
+            _maxLengthOverride = Mathf.Max(0f, maxLength);
+        }
+
+        /// <summary>
+        /// 모든 배율을 한 번에 설정 (자식 빔 생성 시 사용)
+        /// </summary>
+        public void SetChildBeamMultipliers(float damage, float width, float tickRate, float maxLength = 0f, float duration = 0f)
+        {
+            SetDamageMultiplier(damage);
+            SetWidthMultiplier(width);
+            SetTickRateMultiplier(tickRate);
+            SetMaxLengthOverride(maxLength);
+            
+            // 자식 빔 자동 라이프사이클 설정
+            if (duration > 0f)
+            {
+                _isChildBeam = true;
+                _childBeamDuration = duration;
+                _childBeamAge = 0f;
+            }
         }
 
         private void Awake()
@@ -245,8 +301,9 @@ namespace Polar.Weapons.Projectiles
                 lineRenderer.enabled = true;
                 lineRenderer.startColor = LaserData.BeamColor;
                 lineRenderer.endColor = LaserData.BeamColor;
-                lineRenderer.startWidth = LaserData.BeamWidth;
-                lineRenderer.endWidth = LaserData.BeamWidth;
+                float width = LaserData.BeamWidth * _widthMultiplier;
+                lineRenderer.startWidth = width;
+                lineRenderer.endWidth = width;
             }
             else
             {
@@ -311,6 +368,15 @@ namespace Polar.Weapons.Projectiles
             _segmentStartPoint = Vector2.zero;
 
             _damageMultiplier = 1f;
+            _widthMultiplier = 1f;
+            _tickRateMultiplier = 1f;
+            _maxLengthOverride = 0f;
+            
+            // 자식 빔 필드 초기화
+            _isChildBeam = false;
+            _childBeamDuration = 0f;
+            _childBeamAge = 0f;
+            OnDamageTick = null;
 
             if (lineRenderer != null)
             {
@@ -320,6 +386,16 @@ namespace Polar.Weapons.Projectiles
 
         protected override void OnUpdate(float deltaTime)
         {
+            // 자식 빔 자동 라이프사이클 관리
+            if (_isChildBeam && !_isFlyingAway)
+            {
+                _childBeamAge += deltaTime;
+                if (_childBeamAge >= _childBeamDuration)
+                {
+                    BeginFlyAway();
+                }
+            }
+
             if (_renderMode == BeamRenderMode.HitscanToWall || _renderMode == BeamRenderMode.FixedSegment)
             {
                 UpdateHitscanLike(deltaTime);
@@ -403,7 +479,11 @@ namespace Polar.Weapons.Projectiles
             int sectorIndex = _field.AngleToSectorIndex(angleDeg);
             float sectorRadius = _field.GetSectorRadius(sectorIndex);
 
-            return center + dir * sectorRadius;
+            // 자식 빔의 최대 길이 제한 적용
+            float maxLength = _maxLengthOverride > 0f ? _maxLengthOverride : (LaserData != null ? LaserData.MaxLength : sectorRadius);
+            float actualDistance = Mathf.Min(sectorRadius, maxLength);
+
+            return center + dir * actualDistance;
         }
 
         private void UpdateHitscanVisual()
@@ -445,6 +525,9 @@ namespace Polar.Weapons.Projectiles
                 width = _hitscanMaxWidth;
             }
 
+            // 폭에 배율 적용
+            width *= _widthMultiplier;
+
             Color baseColor = LaserData != null ? LaserData.BeamColor : Color.cyan;
             Color c = new Color(baseColor.r, baseColor.g, baseColor.b, alpha);
 
@@ -460,7 +543,8 @@ namespace Polar.Weapons.Projectiles
 
         private void ApplyHitscanTickDamage()
         {
-            float tickRate = Mathf.Max(0.0001f, _weaponData.TickRate);
+            float baseTickRate = Mathf.Max(0.0001f, _weaponData.TickRate);
+            float tickRate = baseTickRate * _tickRateMultiplier;
             float interval = 1f / tickRate;
 
             if (Time.time < _nextTickTime)
@@ -470,8 +554,12 @@ namespace Polar.Weapons.Projectiles
 
             _nextTickTime = Time.time + interval;
 
+
             ApplyMultiSectorDamage(_hitscanEndPoint);
             _tickCount++;
+
+            // 반사 콜백 호출 (벽 충돌 지점, 진행 방향)
+            OnDamageTick?.Invoke(_hitscanEndPoint, _direction);
         }
 
         private void UpdateParticles(float deltaTime)
@@ -508,7 +596,21 @@ namespace Polar.Weapons.Projectiles
             {
                 if (!particle.Blocked)
                 {
-                    particle.Age += deltaTime;
+                    // 파티클 위치 기반으로 현재 섹터의 속도 배율 적용
+                    float speedMultiplier = 1f;
+                    
+                    Vector2 particlePos = particle.GetPosition(speed);
+                    Vector2 dirFromCenter = particlePos - center;
+                    
+                    if (dirFromCenter.sqrMagnitude > 0.0001f)
+                    {
+                        float angleDeg = Mathf.Atan2(dirFromCenter.y, dirFromCenter.x) * Mathf.Rad2Deg;
+                        if (angleDeg < 0f) angleDeg += 360f;
+                        int sectorIndex = _field.AngleToSectorIndex(angleDeg);
+                        speedMultiplier = _field.GetSectorSpeedMultiplier(sectorIndex);
+                    }
+                    
+                    particle.Age += deltaTime * speedMultiplier;
                 }
             }
 
@@ -585,7 +687,8 @@ namespace Polar.Weapons.Projectiles
 
         private void ApplyTickDamage()
         {
-            float tickRate = Mathf.Max(0.0001f, _weaponData.TickRate);
+            float baseTickRate = Mathf.Max(0.0001f, _weaponData.TickRate);
+            float tickRate = baseTickRate * _tickRateMultiplier;
             float interval = 1f / tickRate;
 
             if (Time.time >= _nextTickTime)
@@ -595,8 +698,17 @@ namespace Polar.Weapons.Projectiles
                 if (_particles.Count > 0 && _particles[_particles.Count - 1].Blocked && !_isFlyingAway)
                 {
                     Vector2 headPos = GetHeadPos();
+                    
+                    if (logTickDamage)
+                    {
+                        Debug.Log($"[PolarLaserProjectile] ApplyTickDamage: isChild={_isChildBeam}, headPos={headPos}, showGizmos={showDamageGizmos}, hasData={_hasLastHitData}, dmgMul={_damageMultiplier:F2}");
+                    }
+                    
                     ApplyMultiSectorDamage(headPos);
                     _tickCount++;
+
+                    // 반사 콜백 호출 (벽 충돌 지점, 진행 방향)
+                    OnDamageTick?.Invoke(headPos, _direction);
                 }
             }
         }

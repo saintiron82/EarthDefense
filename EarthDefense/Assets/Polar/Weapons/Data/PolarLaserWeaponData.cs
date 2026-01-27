@@ -90,8 +90,15 @@ namespace Polar.Weapons
         [Tooltip("반사 횟수 (0 = 반사 안함)")]
         [SerializeField, Min(0)] private int reflectCount = 0;
 
-        [Tooltip("반사 시 데미지 배율 (1.0 = 100%)")]
-        [SerializeField, Range(0.1f, 1.5f)] private float reflectDamageMultiplier = 0.7f;
+        [Tooltip("반사 확률 (0~1, 1.0 = 100%)")]
+        [SerializeField, Range(0f, 1f)] private float reflectProbability = 1f;
+
+        [Header("Child Beam (열성 유전)")]
+        [Tooltip("반사된 자식 빔의 통합 배율 (1.0 = 부모와 동일)\n- 데미지, 폭, 틱레이트, 길이에 적용")]
+        [SerializeField, Range(0.1f, 2f)] private float childBeamMultiplier = 0.7f;
+
+        [Tooltip("반사된 자식 빔의 지속 시간(초) (0 = 메인 빔과 동일)")]
+        [SerializeField, Min(0f)] private float childBeamDuration = 0f;
 
         [Tooltip("반사 각도 범위 (degree, 0 = 직각 반사만)")]
         [SerializeField, Range(0f, 180f)] private float reflectAngleRange = 45f;
@@ -111,7 +118,9 @@ namespace Polar.Weapons
         public LaserReflectMode ReflectMode => reflectMode;
         public string ChildBeamProjectileBundleId => childBeamProjectileBundleId;
         public int ReflectCount => reflectCount;
-        public float ReflectDamageMultiplier => reflectDamageMultiplier;
+        public float ReflectProbability => reflectProbability;
+        public float ChildBeamMultiplier => childBeamMultiplier;
+        public float ChildBeamDuration => childBeamDuration;
         public float ReflectAngleRange => reflectAngleRange;
 
         public override string ToJson(bool prettyPrint = true)
@@ -136,7 +145,9 @@ namespace Polar.Weapons
                 reflectMode = (int)this.reflectMode,
                 childBeamProjectileBundleId = this.childBeamProjectileBundleId,
                 reflectCount = this.reflectCount,
-                reflectDamageMultiplier = this.reflectDamageMultiplier,
+                reflectProbability = this.reflectProbability,
+                childBeamMultiplier = this.childBeamMultiplier,
+                childBeamDuration = this.childBeamDuration,
                 reflectAngleRange = this.reflectAngleRange
             };
 
@@ -174,7 +185,9 @@ namespace Polar.Weapons
             this.reflectMode = (LaserReflectMode)data.reflectMode;
             this.childBeamProjectileBundleId = data.childBeamProjectileBundleId;
             this.reflectCount = data.reflectCount;
-            if (data.reflectDamageMultiplier > 0) this.reflectDamageMultiplier = data.reflectDamageMultiplier;
+            if (data.reflectProbability >= 0) this.reflectProbability = data.reflectProbability;
+            if (data.childBeamMultiplier > 0) this.childBeamMultiplier = data.childBeamMultiplier;
+            if (data.childBeamDuration >= 0) this.childBeamDuration = data.childBeamDuration;
             if (data.reflectAngleRange >= 0) this.reflectAngleRange = data.reflectAngleRange;
         }
 
@@ -197,7 +210,9 @@ namespace Polar.Weapons
             public int reflectMode;
             public string childBeamProjectileBundleId;
             public int reflectCount;
-            public float reflectDamageMultiplier;
+            public float reflectProbability;
+            public float childBeamMultiplier;
+            public float childBeamDuration;
             public float reflectAngleRange;
         }
     }

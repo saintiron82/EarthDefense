@@ -1,0 +1,2 @@
+Broken backup created by Copilot due to truncated WeaponAssemblyWindow.cs after edits.
+Original file got truncated at line ~394. Recover from version control if available.

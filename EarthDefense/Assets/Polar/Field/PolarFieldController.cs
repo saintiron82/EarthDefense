@@ -51,6 +51,9 @@ namespace Polar.Field
         private float[] _recoveryScales;    // 각 섹터의 회복 속도 배율 (0.0 ~ 1.0)
         private float[] _woundCooldowns;    // 상처 쿨다운 (초)
         private float[] _lastDamageTimes;   // 최근 피해 시각 (초)
+        
+        // 속도 배율 시스템 (특정 영역 둔화)
+        private float[] _speedMultipliers;  // 각 섹터의 속도 배율 (1.0 = 정상, 0.5 = 50% 둔화)
 
         // 게임 상태
         private bool _isGameOver;
@@ -155,6 +158,7 @@ namespace Polar.Field
                 _recoveryScales = new float[180];
                 _woundCooldowns = new float[180];
                 _lastDamageTimes = new float[180];
+                _speedMultipliers = new float[180];
                 
                 for (int i = 0; i < 180; i++)
                 {
@@ -164,6 +168,7 @@ namespace Polar.Field
                     _recoveryScales[i] = 1.0f;  // 정상 상태
                     _woundCooldowns[i] = 0f;
                     _lastDamageTimes[i] = -999f;
+                    _speedMultipliers[i] = 1.0f;  // 정상 속도
                 }
                 return;
             }
@@ -175,6 +180,7 @@ namespace Polar.Field
             _recoveryScales = new float[count];
             _woundCooldowns = new float[count];
             _lastDamageTimes = new float[count];
+            _speedMultipliers = new float[count];
             
             float initialRadius = config.InitialRadius;
 
@@ -186,6 +192,7 @@ namespace Polar.Field
                 _recoveryScales[i] = 1.0f;  // 정상 상태
                 _woundCooldowns[i] = 0f;
                 _lastDamageTimes[i] = -999f;
+                _speedMultipliers[i] = 1.0f;  // 정상 속도
             }
             
             if (enableDebugLogs && config != null)
@@ -232,7 +239,9 @@ namespace Polar.Field
             for (int i = 0; i < _sectorRadii.Length; i++)
             {
                 // 1. 기본 중력 수축 (HTML: wallRadius[i] -= currentGravity * dt)
-                float newRadius = _sectorRadii[i] - reductionAmount;
+                // ✅ 섹터별 속도 배율 적용 (중력장 둔화)
+                float speedMultiplier = _speedMultipliers != null ? _speedMultipliers[i] : 1f;
+                float newRadius = _sectorRadii[i] - (reductionAmount * speedMultiplier);
 
                 // 2. ✅ 평smooth화 보정 (HTML: applySmoothing 재현 + 맥동 연동)
                 // 인접 섹터와의 거리를 비교해 너무 튀어나온 부분은 깎고, 들어간 부분은 메꿈
@@ -720,6 +729,55 @@ namespace Polar.Field
         {
             if (index < 0 || index >= _sectorRadii.Length) return 1f;
             return _recoveryScales[index];
+        }
+        
+        /// <summary>
+        /// 특정 섹터의 속도 배율 조회 (1.0 = 정상, 0.5 = 50% 둔화)
+        /// </summary>
+        public float GetSectorSpeedMultiplier(int sectorIndex)
+        {
+            if (sectorIndex < 0 || sectorIndex >= _speedMultipliers.Length) return 1f;
+            return _speedMultipliers[sectorIndex];
+        }
+        
+        /// <summary>
+        /// 특정 섹터의 속도 배율 설정
+        /// </summary>
+        public void SetSectorSpeedMultiplier(int sectorIndex, float multiplier)
+        {
+            if (sectorIndex < 0 || sectorIndex >= _speedMultipliers.Length) return;
+            _speedMultipliers[sectorIndex] = Mathf.Clamp(multiplier, 0f, 2f);
+        }
+        
+        /// <summary>
+        /// 각도 범위에 대한 속도 배율 설정 (예: 특정 영역 둔화)
+        /// </summary>
+        public void SetSpeedMultiplierForAngleRange(float startAngleDeg, float endAngleDeg, float multiplier)
+        {
+            multiplier = Mathf.Clamp(multiplier, 0f, 2f);
+            
+            int startSector = AngleToSectorIndex(startAngleDeg);
+            int endSector = AngleToSectorIndex(endAngleDeg);
+            
+            if (startSector <= endSector)
+            {
+                for (int i = startSector; i <= endSector; i++)
+                {
+                    SetSectorSpeedMultiplier(i, multiplier);
+                }
+            }
+            else
+            {
+                // 범위가 0도를 넘어가는 경우
+                for (int i = startSector; i < _speedMultipliers.Length; i++)
+                {
+                    SetSectorSpeedMultiplier(i, multiplier);
+                }
+                for (int i = 0; i <= endSector; i++)
+                {
+                    SetSectorSpeedMultiplier(i, multiplier);
+                }
+            }
         }
 
         /// <summary>

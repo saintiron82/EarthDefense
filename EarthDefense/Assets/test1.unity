@@ -260,15 +260,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5806351469590303140, guid: 742b3cec0ac79bd41a574f85cbf4b49c, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 0.27583
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5806351469590303140, guid: 742b3cec0ac79bd41a574f85cbf4b49c, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -0.00078
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5806351469590303140, guid: 742b3cec0ac79bd41a574f85cbf4b49c, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 8.69746
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5806351469590303140, guid: 742b3cec0ac79bd41a574f85cbf4b49c, type: 3}
       propertyPath: m_LocalRotation.w
@@ -301,7 +301,7 @@ PrefabInstance:
     - target: {fileID: 8462461334810432466, guid: 742b3cec0ac79bd41a574f85cbf4b49c, type: 3}
       propertyPath: _weaponManager
       value: 
-      objectReference: {fileID: 473574034}
+      objectReference: {fileID: 0}
     - target: {fileID: 8462461334810432466, guid: 742b3cec0ac79bd41a574f85cbf4b49c, type: 3}
       propertyPath: _polarFieldController
       value: 
@@ -356,7 +356,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dc3d1ae1c38d2cd4babefec0004a1593, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Polar.Input.PolarWeaponInputHandler
-  weaponManager: {fileID: 473574034}
+  weaponManager: {fileID: 0}
   aimCamera: {fileID: 1586126456}
   inputActions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}
   actionMapName: Player
@@ -381,15 +381,15 @@ PrefabInstance:
       objectReference: {fileID: 11400000, guid: b9f015abecba7ef43b7d37455c9fad47, type: 2}
     - target: {fileID: 7569199544910060393, guid: 6f91a2585eca175409964bb9daa7908e, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 0.27583
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 7569199544910060393, guid: 6f91a2585eca175409964bb9daa7908e, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -0.00078
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 7569199544910060393, guid: 6f91a2585eca175409964bb9daa7908e, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 8.69746
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 7569199544910060393, guid: 6f91a2585eca175409964bb9daa7908e, type: 3}
       propertyPath: m_LocalRotation.w
@@ -466,15 +466,15 @@ MonoBehaviour:
   m_GameObject: {fileID: 473574032}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 00e9ee9eeac348d59826a7f439bbab23, type: 3}
+  m_Script: {fileID: 11500000, guid: 57de8cf8e9e047d9a479ee2f06acf061, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Polar.Weapons.PlayerWeaponManager
   polarFieldBehaviour: {fileID: 573076706}
-  weaponSlot: {fileID: 1434197946}
   defaultWeaponData: {fileID: 0}
-  dataTable: {fileID: 11400000, guid: 87fc21ad410303048a86ba8df915f388, type: 2}
-  defaultWeaponId: Laser
-  enableMouseAim: 1
+  dataTable: {fileID: 0}
+  defaultWeaponId: GravityTurret
+  defaultStartRadius: 0.8
+  weaponSlot: {fileID: 1434197946}
 --- !u!1 &573076704
 GameObject:
   m_ObjectHideFlags: 0
@@ -505,7 +505,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cc7656b0e6c2fc143a4d9e08e0d3147f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShapeDefense.Scripts.Polar.PolarBoundaryRenderer
-  boundaryColor: {r: 0, g: 0.8, b: 0.8, a: 0.3}
+  boundaryColor: {r: 0.8, g: 0.18632916, b: 0, a: 0.3}
   customMaterial: {fileID: 0}
   edgeGlowColor: {r: 0, g: 2, b: 2, a: 1}
   edgeGlowStrength: 10
@@ -668,8 +668,8 @@ Camera:
   m_GameObject: {fileID: 1586126453}
   m_Enabled: 1
   serializedVersion: 2
-  m_ClearFlags: 1
-  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+  m_ClearFlags: 2
+  m_BackGroundColor: {r: 0, g: 0, b: 0, a: 0}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -719,7 +719,7 @@ Transform:
   m_GameObject: {fileID: 1586126453}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: -10}
+  m_LocalPosition: {x: 0, y: 0, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

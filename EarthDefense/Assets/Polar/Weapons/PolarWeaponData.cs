@@ -24,6 +24,33 @@ namespace Polar.Weapons
     }
 
     /// <summary>
+    /// 투사체 충돌 반응 (탄 종류별 규칙)
+    /// </summary>
+    public enum ProjectileHitResponse
+    {
+        StopAndApplyDamage,  // 충돌 시 데미지 적용 + 소멸
+        StopNoDamage,        // 충돌 시 데미지 미적용 + 소멸
+        PenetrateAndDamage,  // 관통 + 데미지 적용
+        PenetrateNoDamage    // 관통 + 데미지 미적용
+    }
+
+    [System.Serializable]
+    public struct ProjectileImpactPolicy
+    {
+        [Tooltip("충돌 시 투사체 반응")]
+        public ProjectileHitResponse hitResponse;
+
+        [Tooltip("관통 가능 횟수 (0 = 관통 없음, -1 = 무제한)")]
+        public int penetrationCount;
+
+        public static ProjectileImpactPolicy Default => new ProjectileImpactPolicy
+        {
+            hitResponse = ProjectileHitResponse.StopAndApplyDamage,
+            penetrationCount = 0
+        };
+    }
+
+    /// <summary>
     /// Polar 전용 무기 데이터
     /// </summary>
     [CreateAssetMenu(fileName = "PolarWeaponData", menuName = "EarthDefense/Polar/WeaponData", order = 1)]
@@ -54,8 +81,15 @@ namespace Polar.Weapons
         [Tooltip("초당 타격 횟수 (예: 10 = 0.1초마다 1회)")]
         [SerializeField, Min(0.1f)] private float tickRate = 10f;
 
+        [Header("Impact Effects (optional)")]
+        [Tooltip("충돌 시 발동되는 추가 효과들 (중력장, 화염 등)")]
+        [SerializeField] private ScriptableObject[] impactEffects;
+
         [Header("Shared Option Profile (optional)")]
         [SerializeField] private PolarWeaponOptionProfile optionProfile;
+
+        [Header("Projectile Impact Policy (optional)")]
+        [SerializeField] private ProjectileImpactPolicy projectileImpactPolicy = default;
 
         public string Id => id;
         public string WeaponName => weaponName;
@@ -69,7 +103,11 @@ namespace Polar.Weapons
         public bool UseGaussianFalloff => optionProfile != null ? optionProfile.UseGaussianFalloff : useGaussianFalloff;
         public float WoundIntensity => optionProfile != null ? optionProfile.WoundIntensity : woundIntensity;
         public float TickRate => optionProfile != null ? optionProfile.TickRate : tickRate;
+        public ScriptableObject[] ImpactEffects => impactEffects;
         public PolarWeaponOptionProfile OptionProfile => optionProfile;
+        public ProjectileImpactPolicy ImpactPolicy => projectileImpactPolicy.Equals(default(ProjectileImpactPolicy))
+            ? ProjectileImpactPolicy.Default
+            : projectileImpactPolicy;
 
         /// <summary>
         /// JSON으로 내보내기 (직렬화)
@@ -89,7 +127,9 @@ namespace Polar.Weapons
                 useGaussianFalloff = this.useGaussianFalloff,
                 woundIntensity = this.woundIntensity,
                 tickRate = this.tickRate,
-                optionProfileId = this.optionProfile != null ? this.optionProfile.Id : null
+                optionProfileId = this.optionProfile != null ? this.optionProfile.Id : null,
+                projectileHitResponse = ImpactPolicy.hitResponse.ToString(),
+                penetrationCount = ImpactPolicy.penetrationCount
             };
 
             return JsonUtility.ToJson(data, prettyPrint);
@@ -113,6 +153,13 @@ namespace Polar.Weapons
             this.useGaussianFalloff = data.useGaussianFalloff;
             this.woundIntensity = data.woundIntensity;
             this.tickRate = data.tickRate;
+
+            if (!string.IsNullOrEmpty(data.projectileHitResponse) &&
+                System.Enum.TryParse<ProjectileHitResponse>(data.projectileHitResponse, out var parsedHitResponse))
+            {
+                projectileImpactPolicy.hitResponse = parsedHitResponse;
+            }
+            projectileImpactPolicy.penetrationCount = data.penetrationCount;
 
 #if UNITY_EDITOR
             // optionProfileId가 있으면 프로필 참조 연결 시도
@@ -149,6 +196,8 @@ namespace Polar.Weapons
             public float woundIntensity;
             public float tickRate;
             public string optionProfileId;
+            public string projectileHitResponse;
+            public int penetrationCount;
         }
 
 #if UNITY_EDITOR

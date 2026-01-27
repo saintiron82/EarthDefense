@@ -20,6 +20,9 @@ namespace Script.SystemCore.Resource
         private Dictionary<string, ResourceBundle> _idToBundle;
         private bool _initialized;
 
+        private const string RuntimeIdPrefix = "runtime://";
+        private Transform _runtimeCreateRoot;
+
         public override async UniTask<bool> Init()
         {
             await base.Init();
@@ -442,6 +445,94 @@ namespace Script.SystemCore.Resource
             ReleaseAll();
             Instance = null;
             base.Destroy();
+        }
+
+        private Transform GetOrCreateRuntimeRoot()
+        {
+            if (_runtimeCreateRoot != null) return _runtimeCreateRoot;
+
+            // 루트 아래에 고정 오브젝트로 보관
+            var go = GameObject.Find("RuntimeCreateObject");
+            if (go == null)
+            {
+                go = new GameObject("RuntimeCreateObject");
+                // 서비스 인스턴스 아래에 두면 씬 정리에 유리
+                go.transform.SetParent(transform, worldPositionStays: false);
+            }
+
+            _runtimeCreateRoot = go.transform;
+            return _runtimeCreateRoot;
+        }
+
+        /// <summary>
+        /// 런타임에 만들어진 프리팹 템플릿을 ResourceService에 등록합니다.
+        /// - 내부 캐시(_cache)에 등록되므로 LoadPrefab(id)로 즉시 사용 가능
+        /// - 템플릿은 RuntimeCreateObject 밑에 비활성으로 보관됩니다.
+        /// </summary>
+        public bool RegisterRuntimePrefab(string id, GameObject prefabTemplate, bool overwrite = false)
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                Debug.LogWarning("[ResourceService] RegisterRuntimePrefab failed: id is null/empty");
+                return false;
+            }
+
+            if (prefabTemplate == null)
+            {
+                Debug.LogWarning("[ResourceService] RegisterRuntimePrefab failed: prefabTemplate is null");
+                return false;
+            }
+
+            Initialize();
+
+            if (!overwrite && _cache.ContainsKey(id))
+            {
+                return false;
+            }
+
+            // 템플릿 보관: scene instance라도 원본을 여기로 옮겨서 템플릿처럼 사용
+            var root = GetOrCreateRuntimeRoot();
+            prefabTemplate.transform.SetParent(root, worldPositionStays: false);
+            prefabTemplate.SetActive(false);
+
+            _cache[id] = prefabTemplate;
+            RegisterToGroup(id, "Runtime");
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log($"[ResourceService] Runtime prefab registered: {id} ({prefabTemplate.name})");
+#endif
+            return true;
+        }
+
+        /// <summary>
+        /// 자동 ID로 런타임 프리팹 템플릿을 등록합니다.
+        /// </summary>
+        public string RegisterRuntimePrefabAutoId(GameObject prefabTemplate, string nameHint = null)
+        {
+            if (prefabTemplate == null)
+            {
+                Debug.LogWarning("[ResourceService] RegisterRuntimePrefabAutoId failed: prefabTemplate is null");
+                return null;
+            }
+
+            Initialize();
+
+            var hint = string.IsNullOrWhiteSpace(nameHint) ? prefabTemplate.name : nameHint;
+            hint = SanitizeIdPart(hint);
+
+            var id = $"{RuntimeIdPrefix}{hint}/{System.DateTime.UtcNow:yyyyMMddTHHmmssZ}/{System.Guid.NewGuid():N}";
+            RegisterRuntimePrefab(id, prefabTemplate, overwrite: false);
+            return id;
+        }
+
+        private static string SanitizeIdPart(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return "prefab";
+            return raw
+                .Trim()
+                .Replace(' ', '_')
+                .Replace('/', '_')
+                .Replace('\\', '_');
         }
     }
 }

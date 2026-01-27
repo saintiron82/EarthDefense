@@ -1,4 +1,4 @@
-﻿﻿using UnityEngine;
+﻿using UnityEngine;
 
 namespace Polar.Weapons.Projectiles
 {
@@ -11,27 +11,19 @@ namespace Polar.Weapons.Projectiles
     /// </summary>
     public class PolarMachinegunProjectile : PolarProjectileBase
     {
-        [Header("Polar Coordinates")]
-        [SerializeField] private float angle;
-        [SerializeField] private float radius;
-        
         [Header("Visual")]
         [SerializeField] private SpriteRenderer spriteRenderer;
         [SerializeField] private TrailRenderer trailRenderer;
         [SerializeField] private LineRenderer lineRenderer;
         
         private PolarMachinegunWeaponData MachinegunData => _weaponData as PolarMachinegunWeaponData;
-        
-        private float speed;
-        private float collisionEpsilon = 0.1f;
-        private PolarCombatProperties? _combatProps;
-        
+
         // 수명 관리
         private float _spawnTime;
         private float _lifetime;
         
-        public float Angle => angle;
-        public float Radius => radius;
+        public float Angle => _angleDeg;
+        public float Radius => _radius;
 
         private void Awake()
         {
@@ -42,7 +34,7 @@ namespace Polar.Weapons.Projectiles
 
         public override void Launch(IPolarField field, PolarWeaponData weaponData)
         {
-            if (weaponData is not PolarMachinegunWeaponData)
+            if (weaponData is not PolarMachinegunWeaponData machinegunData)
             {
                 Debug.LogError("[PolarMachinegunProjectile] Requires PolarMachinegunWeaponData!");
                 return;
@@ -52,18 +44,21 @@ namespace Polar.Weapons.Projectiles
             _weaponData = weaponData;
             _isActive = true;
 
-            _combatProps = PolarCombatProperties.FromWeaponData(weaponData);
-
-            angle = 0f;
-            radius = 0.8f;
-            speed = MachinegunData.ProjectileSpeed;
-            
             // 수명 초기화
             _spawnTime = Time.time;
-            _lifetime = MachinegunData.ProjectileLifetime;
+            _lifetime = machinegunData.ProjectileLifetime;
+
+            // ⚠️ 기본 각도/반경 설정 (오버로드 호출 안될 때 대비)
+            if (_angleDeg == 0f && _radius == 0f && _speed == 0f)
+            {
+                Debug.LogWarning("[PolarMachinegun] Launch called without angle/radius! Using defaults.");
+                _angleDeg = 0f;
+                _radius = 0.8f;
+                _speed = machinegunData.ProjectileSpeed;
+                UpdatePolarPosition();
+            }
 
             ActivateVisuals();
-            UpdatePosition();
         }
 
         /// <summary>
@@ -72,9 +67,16 @@ namespace Polar.Weapons.Projectiles
         public void Launch(IPolarField field, PolarWeaponData weaponData, float launchAngle, float startRadius)
         {
             Launch(field, weaponData);
-            angle = launchAngle;
-            radius = startRadius;
-            UpdatePosition();
+
+            // Launch가 타입 불일치로 실패하면 _weaponData가 세팅되지 않을 수 있으니 방어
+            if (MachinegunData == null)
+            {
+                Debug.LogError("[PolarMachinegunProjectile] Launch aborted: invalid weapon data");
+                ReturnToPool();
+                return;
+            }
+
+            LaunchPolar(field, weaponData, launchAngle, startRadius, MachinegunData.ProjectileSpeed);
         }
 
         public override void Deactivate()
@@ -91,10 +93,6 @@ namespace Polar.Weapons.Projectiles
         /// </summary>
         protected override void OnPoolReturn()
         {
-            angle = 0f;
-            radius = 0f;
-            speed = 0f;
-            _combatProps = null;
             _spawnTime = 0f;
             _lifetime = 0f;
             
@@ -109,17 +107,18 @@ namespace Polar.Weapons.Projectiles
 
         protected override void OnUpdate(float deltaTime)
         {
-            radius += speed * deltaTime;
-            UpdatePosition();
-            
-            if (CheckCollision())
+            if (UpdatePolarMovementAndCheckWallCollision(deltaTime, out int _, out _))
             {
-                OnCollision();
-                ReturnToPool();
+                // 벽 충돌 처리(Effect/데미지/관통 여부)는 베이스가 수행
+                // 소멸 여부만 여기서 결정: 관통 정책이면 _hasReachedWall가 false로 되돌려져 다음 프레임 계속 진행
+                if (_hasReachedWall)
+                {
+                    ReturnToPool();
+                }
                 return;
             }
             
-            if (radius > _field.InitialRadius * 2f)
+            if (_radius > _field.InitialRadius * 2f)
             {
                 ReturnToPool();
                 return;
@@ -156,64 +155,6 @@ namespace Polar.Weapons.Projectiles
             }
 
             transform.localScale = Vector3.one * MachinegunData.ProjectileScale;
-        }
-
-        private void UpdatePosition()
-        {
-            if (_field == null) return;
-
-            float angleRad = angle * Mathf.Deg2Rad;
-            Vector3 polarPos = new Vector3(
-                Mathf.Cos(angleRad) * radius,
-                Mathf.Sin(angleRad) * radius,
-                0f
-            );
-            
-            transform.position = _field.CenterPosition + polarPos;
-
-            if (lineRenderer != null)
-            {
-                lineRenderer.SetPosition(0, _field.CenterPosition);
-                lineRenderer.SetPosition(1, transform.position);
-            }
-        }
-
-        private bool CheckCollision()
-        {
-            if (_field == null) return false;
-
-            int sectorIndex = _field.AngleToSectorIndex(angle);
-            float sectorRadius = _field.GetSectorRadius(sectorIndex);
-            
-            return radius >= (sectorRadius - collisionEpsilon);
-        }
-
-        private void OnCollision()
-        {
-            if (_field == null)
-            {
-                return;
-            }
-
-            int hitSectorIndex = _field.AngleToSectorIndex(angle);
-
-            if (_combatProps.HasValue)
-            {
-                ApplyCombatDamage(hitSectorIndex, _combatProps.Value);
-            }
-        }
-
-        private void ApplyCombatDamage(int centerIndex, PolarCombatProperties props)
-        {
-            _field.SetLastWeaponKnockback(props.KnockbackPower);
-
-            // 머신건은 단일 섹터만 타격 (작은 탄환 = 정확한 단일 타격)
-            _field.ApplyDamageToSector(centerIndex, props.Damage);
-
-            if (_field.EnableWoundSystem)
-            {
-                _field.ApplyWound(centerIndex, props.WoundIntensity);
-            }
         }
     }
 }

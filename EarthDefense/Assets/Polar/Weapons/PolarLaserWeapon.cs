@@ -5,35 +5,30 @@ using System.Collections.Generic;
 
 namespace Polar.Weapons
 {
+    /// <summary>
+    /// 레이저 전용 무기 (연속 빔, 반사 등 특수 기능)
+    /// </summary>
     public class PolarLaserWeapon : PolarWeaponBase
     {
-        private PolarLaserWeaponData LaserData => weaponData as PolarLaserWeaponData;
-
-        private PolarLaserProjectile _activeBeam;
-        private readonly List<PolarLaserProjectile> _activeChildBeams = new List<PolarLaserProjectile>();
-
-        private bool _isFiring;
-
         [Header("Debug")]
         [SerializeField] private bool logReflect;
 
-        public override void Fire()
+        private PolarLaserWeaponData LaserData => weaponData as PolarLaserWeaponData;
+        private PolarLaserProjectile _activeBeam;
+        private readonly List<PolarLaserProjectile> _activeChildBeams = new List<PolarLaserProjectile>();
+
+        public override void Fire(float angleDeg, float startRadius)
+        {
+            // 레이저는 각도/반경 사용 안함 - Muzzle 방향 사용
+            Fire();
+        }
+
+        public void Fire()
         {
             if (_field == null || LaserData == null) return;
 
             Vector2 origin = Muzzle.position;
             Vector2 direction = Muzzle.right;
-
-            if (LaserData.ReflectMode == LaserReflectMode.ChildBeam)
-            {
-                if (_activeBeam != null && _activeBeam.IsActive)
-                {
-                    _activeBeam.UpdateOriginDirection(origin, direction);
-                }
-
-                UpdateChildBeamSegments(origin, direction);
-                return;
-            }
 
             if (_activeBeam != null && _activeBeam.IsActive)
             {
@@ -42,8 +37,7 @@ namespace Polar.Weapons
         }
 
         /// <summary>
-        /// 발사 시작(클릭/눌림 이벤트)
-        /// - 이미 빔이 있으면 즉시 새 빔을 만들기 위해 기존 빔은 FlyAway로 전환
+        /// 발사 시작 (기존 빔이 있으면 FlyAway 후 새 빔 생성)
         /// </summary>
         public void StartFire()
         {
@@ -54,199 +48,126 @@ namespace Polar.Weapons
 
             StopFireInternal();
 
-            if (LaserData.ReflectMode == LaserReflectMode.ChildBeam)
-            {
-                if (logReflect)
-                {
-                    Debug.Log($"[PolarLaserWeapon] StartFire ChildBeam reflectCount={LaserData.ReflectCount}, bundle(main)={LaserData.ProjectileBundleId}, bundle(child)={LaserData.ChildBeamProjectileBundleId}");
-                }
-
-                SpawnBeam(origin, direction);
-                SpawnChildBeamSegments(origin, direction);
-            }
-            else
-            {
-                SpawnBeam(origin, direction);
-            }
+            SpawnBeam(origin, direction, LaserData.ReflectCount);
         }
 
-        private void SpawnBeam(Vector2 origin, Vector2 direction)
+        private void SpawnBeam(Vector2 origin, Vector2 direction, int remainingReflects)
         {
-            // ✅ ProjectileBundleId 사용
-            if (PoolService.Instance == null || string.IsNullOrEmpty(LaserData.ProjectileBundleId))
+            int currentDepth = LaserData.ReflectCount - remainingReflects;
+            
+            // 자식 빔은 ChildBeamProjectileBundleId 사용 (없으면 메인 번들 재사용)
+            string bundleId = currentDepth > 0 && !string.IsNullOrEmpty(LaserData.ChildBeamProjectileBundleId)
+                ? LaserData.ChildBeamProjectileBundleId
+                : LaserData.ProjectileBundleId;
+
+            if (PoolService.Instance == null || string.IsNullOrEmpty(bundleId))
             {
                 Debug.LogError("[PolarLaserWeapon] PoolService not available!");
                 return;
             }
 
             PolarLaserProjectile beam = PoolService.Instance.Get<PolarLaserProjectile>(
-                LaserData.ProjectileBundleId,
+                bundleId,
                 origin,
                 Quaternion.identity
             );
 
             if (beam != null)
             {
-                beam.SetDamageMultiplier(1f);
+                // 빔 설정
+                if (currentDepth == 0)
+                {
+                    ConfigureMainBeam(beam);
+                }
+                else
+                {
+                    ConfigureChildBeam(beam);
+                }
+                
+                // 반사 콜백 설정 (모든 빔)
+                beam.OnDamageTick = (hitPoint, dir) => OnBeamDamageTick(hitPoint, dir, remainingReflects);
+                
+                // Launch 호출 (InitializeBeam 실행됨)
                 beam.Launch(_field, LaserData, origin, direction);
-                _activeBeam = beam;
-            }
-        }
-
-        private void SpawnChildBeamSegments(Vector2 origin, Vector2 direction)
-        {
-            if (PoolService.Instance == null)
-            {
-                Debug.LogError("[PolarLaserWeapon] PoolService not available!");
-                return;
-            }
-
-            string bundleId = !string.IsNullOrEmpty(LaserData.ChildBeamProjectileBundleId)
-                ? LaserData.ChildBeamProjectileBundleId
-                : LaserData.ProjectileBundleId;
-
-            if (logReflect)
-            {
-                Debug.Log($"[PolarLaserWeapon] ChildBeam bundle resolved: '{bundleId}' (child='{LaserData.ChildBeamProjectileBundleId}', main='{LaserData.ProjectileBundleId}')");
-            }
-
-            if (string.IsNullOrEmpty(bundleId))
-            {
-                Debug.LogError("[PolarLaserWeapon] Projectile bundle id is empty!");
-                return;
-            }
-
-            int reflectCount = Mathf.Max(0, LaserData.ReflectCount);
-            if (reflectCount == 0)
-            {
-                if (logReflect)
+                
+                // 빔 추적
+                if (currentDepth == 0)
                 {
-                    Debug.Log("[PolarLaserWeapon] ChildBeam reflectCount=0 (no reflected segments spawned)");
+                    _activeBeam = beam;
                 }
-                return;
-            }
-
-            _activeChildBeams.Clear();
-            for (int i = 0; i < reflectCount; i++)
-            {
-                int bounceIndex = i + 1;
-
-                PolarLaserProjectile seg = PoolService.Instance.Get<PolarLaserProjectile>(bundleId, origin, Quaternion.identity);
-                if (seg == null)
+                else
                 {
-                    if (logReflect)
-                    {
-                        Debug.LogWarning($"[PolarLaserWeapon] Spawn reflected segment#{bounceIndex} FAILED (bundle='{bundleId}')");
-                    }
-                    continue;
-                }
-
-                float dmgMul = Mathf.Pow(LaserData.ReflectDamageMultiplier, bounceIndex);
-                seg.SetDamageMultiplier(dmgMul);
-                _activeChildBeams.Add(seg);
-
-                if (logReflect)
-                {
-                    Debug.Log(
-                        $"[PolarLaserWeapon] Spawn reflected segment#{bounceIndex} OK " +
-                        $"instance={seg.GetInstanceID()} activeSelf={seg.gameObject.activeSelf} activeInHierarchy={seg.gameObject.activeInHierarchy} IsActive={seg.IsActive} " +
-                        $"pos={seg.transform.position} bundle='{seg.PoolBundleId}'"
-                    );
-                }
-            }
-
-            UpdateChildBeamSegments(origin, direction);
-
-            if (logReflect)
-            {
-                for (int i = 0; i < _activeChildBeams.Count; i++)
-                {
-                    var seg = _activeChildBeams[i];
-                    if (seg == null) continue;
-
-                    Debug.Log(
-                        $"[PolarLaserWeapon] PostUpdate segment#{i + 1} instance={seg.GetInstanceID()} activeInHierarchy={seg.gameObject.activeInHierarchy} IsActive={seg.IsActive} " +
-                        $"start={seg.SegmentStartPoint} end={seg.SegmentEndPoint}"
-                    );
+                    _activeChildBeams.Add(beam);
                 }
             }
         }
 
-        private void UpdateChildBeamSegments(Vector2 origin, Vector2 direction)
+        private void ConfigureMainBeam(PolarLaserProjectile beam)
         {
-            if (_field == null || LaserData == null)
+            beam.SetDamageMultiplier(1f);
+            beam.SetWidthMultiplier(1f);
+            beam.SetTickRateMultiplier(1f);
+        }
+
+        private void ConfigureChildBeam(PolarLaserProjectile beam)
+        {
+            float multiplier = LaserData.ChildBeamMultiplier;
+            
+            // 길이: 배율 적용
+            float childMaxLength = LaserData.MaxLength * multiplier;
+            
+            // 지속 시간: 독립 값 사용 (0이면 메인 빔과 동일)
+            float childDuration = LaserData.ChildBeamDuration > 0f 
+                ? LaserData.ChildBeamDuration 
+                : LaserData.Duration;  // 0일 때 메인 빔과 동일
+            
+            beam.SetChildBeamMultipliers(
+                multiplier,      // damage
+                multiplier,      // width
+                multiplier,      // tickRate
+                childMaxLength,  // maxLength
+                childDuration    // duration (독립값)
+            );
+        }
+
+        /// <summary>
+        /// 데미지 틱 발생 시 호출되는 콜백 - 반사 확률 체크 및 자식 빔 생성
+        /// </summary>
+        private void OnBeamDamageTick(Vector2 hitPoint, Vector2 direction, int remainingReflects)
+        {
+            // 남은 반사 횟수가 없으면 중단
+            if (remainingReflects <= 0)
             {
                 return;
             }
 
-            if (_activeChildBeams.Count == 0)
+            // 반사 확률 체크
+            float probability = Mathf.Clamp01(LaserData.ReflectProbability);
+            
+            if (Random.value > probability)
             {
+                if (logReflect)
+                {
+                    Debug.Log($"[PolarLaserWeapon] Reflect SKIPPED by probability ({probability:F2})");
+                }
                 return;
             }
 
+            // 반사 방향 계산
             Vector2 center = (_field as Component) != null ? ((Component)_field).transform.position : Vector2.zero;
+            Vector2 normal = (hitPoint - center).sqrMagnitude > 0f ? (hitPoint - center).normalized : Vector2.right;
+            Vector2 reflectDir = Vector2.Reflect(direction, normal).normalized;
+            reflectDir = ApplyReflectAngleNoise(reflectDir);
 
-            Vector2 dir0 = direction.sqrMagnitude > 0f ? direction.normalized : Vector2.right;
+            // 자식 빔 생성
+            SpawnBeam(hitPoint, reflectDir, remainingReflects - 1);
 
-            // 0번 충돌점(벽)
-            Vector2 hit0 = CalculateWallEndPoint(center, dir0);
-
-            // 총 길이 예산: MaxLength
-            float remaining = Mathf.Max(0f, LaserData.MaxLength);
-
-            // base segment 길이 차감 (muzzle -> first wall)
-            remaining = Mathf.Max(0f, remaining - Vector2.Distance(origin, hit0));
-
-            // 첫 반사 방향(완전 반사 + 옵션으로 각도 랜덤 편차)
-            Vector2 normal0 = (hit0 - center).sqrMagnitude > 0f ? (hit0 - center).normalized : Vector2.right;
-            Vector2 currentDir = Vector2.Reflect(dir0, normal0).normalized;
-            currentDir = ApplyReflectAngleNoise(currentDir);
-
-            Vector2 currentStart = hit0;
-
-            for (int i = 0; i < _activeChildBeams.Count; i++)
+            if (logReflect)
             {
-                PolarLaserProjectile seg = _activeChildBeams[i];
-                if (seg == null) continue;
-
-                if (remaining <= 0.001f)
-                {
-                    // 남은 길이가 없으면 더 이상 렌더링/업데이트하지 않음
-                    seg.BeginFlyAway();
-                    continue;
-                }
-
-                // 벽까지의 최대 도달점
-                Vector2 wallEnd = CalculateWallEndPoint(center, currentDir);
-
-                // 이번 세그먼트 실제 길이 = 남은 길이 한도 내로 clamp
-                float maxThis = Vector2.Distance(currentStart, wallEnd);
-                float segLen = Mathf.Min(remaining, maxThis);
-
-                Vector2 end = currentStart + currentDir * segLen;
-
-                // 세그먼트 렌더 업데이트
-                seg.LaunchSegment(_field, LaserData, currentStart, end);
-
-                remaining -= segLen;
-
-                if (logReflect && Time.frameCount % 30 == 0)
-                {
-                    int bounceIndex = i + 1;
-                    Debug.Log($"[PolarLaserWeapon] ReflectUpdate#{bounceIndex} start={currentStart} end={end} dir={currentDir} remaining={remaining:F2}");
-                }
-
-                currentStart = end;
-
-                // 벽에 닿은 경우에만 다음 반사 계산(아직 벽에 못 닿았으면 종료)
-                if (segLen + 0.0001f < maxThis)
-                {
-                    break;
-                }
-
-                Vector2 normal = (currentStart - center).sqrMagnitude > 0f ? (currentStart - center).normalized : Vector2.right;
-                currentDir = Vector2.Reflect(currentDir, normal).normalized;
-                currentDir = ApplyReflectAngleNoise(currentDir);
+                int currentDepth = LaserData.ReflectCount - remainingReflects;
+                int newDepth = currentDepth + 1;
+                Debug.Log($"[PolarLaserWeapon] Spawned child beam depth={newDepth} (remaining={remainingReflects - 1}) at {hitPoint} " +
+                    $"multiplier={LaserData.ChildBeamMultiplier:F2}");
             }
         }
 
@@ -271,18 +192,6 @@ namespace Polar.Weapons
             ).normalized;
         }
 
-        private Vector2 CalculateWallEndPoint(Vector2 center, Vector2 dir)
-        {
-            Vector2 n = dir.sqrMagnitude > 0f ? dir.normalized : Vector2.right;
-
-            float angleDeg = Mathf.Atan2(n.y, n.x) * Mathf.Rad2Deg;
-            if (angleDeg < 0f) angleDeg += 360f;
-
-            int sectorIndex = _field.AngleToSectorIndex(angleDeg);
-            float sectorRadius = _field.GetSectorRadius(sectorIndex);
-
-            return center + n * sectorRadius;
-        }
 
         /// <summary>
         /// 발사 중지 (빔이 날아가며 소멸)
@@ -302,17 +211,9 @@ namespace Polar.Weapons
 
             if (_activeChildBeams.Count > 0)
             {
-                if (logReflect)
+                foreach (var childBeam in _activeChildBeams)
                 {
-                    Debug.Log($"[PolarLaserWeapon] StopFire ChildBeam segments={_activeChildBeams.Count}");
-                }
-
-                for (int i = 0; i < _activeChildBeams.Count; i++)
-                {
-                    if (_activeChildBeams[i] != null)
-                    {
-                        _activeChildBeams[i].BeginFlyAway();
-                    }
+                    childBeam?.BeginFlyAway();
                 }
                 _activeChildBeams.Clear();
             }

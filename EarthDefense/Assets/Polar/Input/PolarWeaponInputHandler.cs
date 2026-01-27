@@ -28,7 +28,7 @@ namespace Polar.Input
         [SerializeField] private bool holdToFire = true;
         
         [Header("Debug")]
-        [SerializeField] private bool enableDebugLogs = false;
+        [SerializeField] private bool enableDebugLogs;
         
         // Runtime
         private PolarInputActionsRuntime _runtimeActions;  // ✅ Polar 전용
@@ -73,7 +73,7 @@ namespace Polar.Input
             
             if (weaponManager != null)
             {
-                weaponManager.StopFire();
+                weaponManager.StopFireLaser();
             }
         }
 
@@ -110,8 +110,10 @@ namespace Polar.Input
             var screenPos = mouse != null ? mouse.position.ReadValue() : Vector2.zero;
             var worldPos = (Vector2)aimCamera.ScreenToWorldPoint(screenPos);
 
-            // 무기에 조준 정보 전달
-            weaponManager.UpdateAim(worldPos);
+            // 마우스 방향을 각도로 변환 (Polar 좌표계)
+            Vector2 fieldCenter = weaponManager.transform.position;
+            Vector2 direction = (worldPos - fieldCenter).normalized;
+            float angleDeg = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
 
             // 공격 입력 처리
             bool attackPressed = _attackAction != null && _attackAction.IsPressed();
@@ -130,19 +132,20 @@ namespace Polar.Input
             // 발사 처리
             if (holdToFire)
             {
-                // 홀드 모드: 누르는 동안 조준 업데이트, 눌림 순간에만 신규 빔 생성
+                // 홀드 모드: 레이저용
                 if (attackJustPressed)
                 {
-                    weaponManager.StartFire();
+                    weaponManager.StartFireLaser();
                 }
 
                 if (attackPressed)
                 {
-                    weaponManager.Fire();
+                    // 연속 발사 (레이저는 내부에서 업데이트)
+                    weaponManager.FireProjectile(angleDeg);
                 }
                 else if (attackReleased)
                 {
-                    weaponManager.StopFire();
+                    weaponManager.StopFireLaser();
                 }
             }
             else
@@ -150,7 +153,7 @@ namespace Polar.Input
                 // 클릭 모드: 클릭마다 1발
                 if (attackJustPressed)
                 {
-                    weaponManager.Fire();
+                    weaponManager.FireProjectile(angleDeg);
                 }
             }
 
